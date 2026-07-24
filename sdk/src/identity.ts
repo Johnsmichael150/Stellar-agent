@@ -9,6 +9,7 @@ import {
   Address,
   xdr,
   Account,
+  StrKey,
 } from "@stellar/stellar-sdk";
 import type { Agent, MarcConfig } from "./types.js";
 
@@ -60,6 +61,16 @@ export class IdentityClient {
    * @returns The assigned on-chain agent ID as a `bigint`.
    */
   async register(owner: Keypair, uri: string): Promise<bigint> {
+    // Client-side guard: validate the owner's public key is a well-formed
+    // Stellar Ed25519 address (starts with 'G', 56 chars, valid checksum).
+    // Without this check the error surfaces as an opaque RPC failure; catching
+    // it here gives callers a clear, actionable message before any network call.
+    if (!StrKey.isValidEd25519PublicKey(owner.publicKey())) {
+      throw new Error(
+        `register: invalid Stellar address "${owner.publicKey()}" — must be a valid Ed25519 public key (starts with G)`,
+      );
+    }
+
     const op = this.contract.call(
       "register",
       new Address(owner.publicKey()).toScVal(),

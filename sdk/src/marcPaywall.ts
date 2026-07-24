@@ -43,6 +43,29 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
     facilitatorApiKey,
   } = opts;
 
+  // Handle CORS preflight OPTIONS requests before any payment check.
+  // Browsers send OPTIONS when the request uses a non-simple Content-Type
+  // (e.g. application/json) or custom headers. Without this, the browser
+  // never gets to send the actual request and the user sees a CORS error
+  // rather than a 402. We respond 204 No Content with permissive CORS
+  // headers so the browser can proceed with the real request.
+  const corsPreflightHandler: RequestHandler = (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Payment, X-Payment-Response",
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  };
+
   const facilitatorClient = new HTTPFacilitatorClient({
     url: facilitatorUrl,
     ...(facilitatorApiKey && {
@@ -76,5 +99,15 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
     },
   };
 
-  return paymentMiddleware(routeConfig, resourceServer) as RequestHandler;
+  const paywall = paymentMiddleware(routeConfig, resourceServer) as RequestHandler;
+
+  // Compose: run CORS preflight first, then the x402 payment check.
+  // OPTIONS requests are short-circuited in corsPreflightHandler (never reach paywall).
+  // All other requests pass through to paywall after CORS headers are set.
+  return (req, res, next) => {
+    corsPreflightHandler(req, res, (err?: unknown) => {
+      if (err) return next(err);
+      paywall(req, res, next);
+    });
+  };
 }

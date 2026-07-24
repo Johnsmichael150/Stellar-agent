@@ -788,6 +788,9 @@
   };
 
   window.__cancelJob = async function(id) {
+    const confirmed = window.confirm("Cancel this job and refund the escrowed funds?");
+    if (!confirmed) return;
+
     showTxOverlay("Cancelling job & refunding...");
     try {
       if (wallet.connected) {

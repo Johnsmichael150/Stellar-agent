@@ -47,7 +47,7 @@ pub struct UriUpdated {
 
 /// Emitted when an agent is removed from the registry.
 #[contractevent]
-pub struct Deregistered {
+pub struct AgentDeregistered {
     #[topic]
     pub owner: Address,
     pub agent_id: u64,
@@ -184,7 +184,7 @@ impl AgentIdentityContract {
             .instance()
             .set(&DataKey::RegisteredCount, &count.saturating_sub(1));
 
-        Deregistered {
+        AgentDeregistered {
             owner: agent.owner,
             agent_id: id,
         }

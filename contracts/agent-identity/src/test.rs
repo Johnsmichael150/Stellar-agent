@@ -117,6 +117,27 @@ fn update_uri_rejects_non_owner() {
 }
 
 #[test]
+fn deregister_emits_agent_deregistered_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://a.json"));
+    client.deregister(&alice, &id);
+
+    let expected_event = AgentDeregistered {
+        owner: alice,
+        agent_id: id,
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&contract_id),
+        [expected_event.to_xdr(&env, &contract_id)],
+    );
+}
+
+#[test]
 #[should_panic(expected = "AgentNotFound")]
 fn deregister_removes_agent_and_owner_lookup() {
     let env = Env::default();

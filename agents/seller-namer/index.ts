@@ -25,10 +25,11 @@ const registryApiKey = process.env.REGISTRY_API_KEY?.trim();
 const OUTPUT_FILE = "output/names.md";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 async function generate(prompt: string): Promise<string> {
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [{ role: "user", content: prompt }],
   });
   return res.choices[0].message.content ?? "";

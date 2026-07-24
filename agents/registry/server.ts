@@ -53,6 +53,18 @@ function validateManifest(m: unknown): string | null {
 const app = express();
 app.use(express.json());
 
+// Parses a manifest file, tolerating malformed JSON. Schema validation (validateManifest)
+// is applied separately by callers that need it, so /heartbeat can still tell
+// "not found" (404) apart from "found but invalid" (422).
+function parseManifestFile(manifestPath: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  } catch (err) {
+    console.warn(`[registry] Skipping ${manifestPath}: invalid JSON (${(err as Error).message})`);
+    return null;
+  }
+}
+
 function loadManifests() {
   return fs
     .readdirSync(AGENTS_DIR)
@@ -60,7 +72,14 @@ function loadManifests() {
     .map((d) => {
       const manifestPath = path.join(AGENTS_DIR, d, "agent.json");
       if (!fs.existsSync(manifestPath)) return null;
-      return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      const manifest = parseManifestFile(manifestPath);
+      if (!manifest) return null;
+      const schemaError = validateManifest(manifest);
+      if (schemaError) {
+        console.warn(`[registry] Skipping ${manifestPath}: ${schemaError}`);
+        return null;
+      }
+      return manifest;
     })
     .filter(Boolean);
 }
@@ -70,8 +89,8 @@ function loadManifest(agentId: string): Record<string, unknown> | null {
     if (!dir.startsWith("seller-")) continue;
     const manifestPath = path.join(AGENTS_DIR, dir, "agent.json");
     if (!fs.existsSync(manifestPath)) continue;
-    const m = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    if (m.id === agentId) return m;
+    const m = parseManifestFile(manifestPath);
+    if (m && m.id === agentId) return m;
   }
   return null;
 }

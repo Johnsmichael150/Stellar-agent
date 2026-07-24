@@ -25,6 +25,7 @@ const registryApiKey = process.env.REGISTRY_API_KEY?.trim();
 const OUTPUT_FILE = "output/research.json";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 interface ResearchOutput {
   summary: string;
@@ -42,7 +43,7 @@ const DEPTH_CONFIG: Record<ResearchDepth, { sourceRange: string; detail: string 
 async function generate(task: string, depth: ResearchDepth = "standard"): Promise<ResearchOutput> {
   const { sourceRange, detail } = DEPTH_CONFIG[depth];
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [
       {
         role: "user",

@@ -49,12 +49,12 @@ test("marcFetch performs one payment retry and resolves on success", async () =>
   const originalCreatePayload = x402Client.prototype.createPaymentPayload;
   const originalGetPaymentRequiredResponse = x402HTTPClient.prototype.getPaymentRequiredResponse;
   const originalEncode = x402HTTPClient.prototype.encodePaymentSignatureHeader;
-  const originalProcess = x402HTTPClient.prototype.processPaymentResult;
+  const originalProcess = (x402HTTPClient.prototype as unknown as { processPaymentResult?: () => Promise<unknown> }).processPaymentResult;
 
   x402Client.prototype.createPaymentPayload = async () => ({ type: "payload" }) as never;
   x402HTTPClient.prototype.getPaymentRequiredResponse = () => ({}) as never;
   x402HTTPClient.prototype.encodePaymentSignatureHeader = () => ({}) as never;
-  x402HTTPClient.prototype.processPaymentResult = async () => ({ recovered: false }) as never;
+  (x402HTTPClient.prototype as unknown as { processPaymentResult: () => Promise<unknown> }).processPaymentResult = async () => ({ recovered: false }) as never;
 
   try {
     const fetcher = marcFetch({
@@ -70,7 +70,9 @@ test("marcFetch performs one payment retry and resolves on success", async () =>
     x402Client.prototype.createPaymentPayload = originalCreatePayload;
     x402HTTPClient.prototype.getPaymentRequiredResponse = originalGetPaymentRequiredResponse;
     x402HTTPClient.prototype.encodePaymentSignatureHeader = originalEncode;
-    x402HTTPClient.prototype.processPaymentResult = originalProcess;
+    if (originalProcess) {
+      (x402HTTPClient.prototype as unknown as { processPaymentResult: () => Promise<unknown> }).processPaymentResult = originalProcess;
+    }
   }
 });
 
@@ -93,12 +95,12 @@ test("marcFetch stops retrying after the configured payment-attempt limit", asyn
   const originalCreatePayload = x402Client.prototype.createPaymentPayload;
   const originalGetPaymentRequiredResponse = x402HTTPClient.prototype.getPaymentRequiredResponse;
   const originalEncode = x402HTTPClient.prototype.encodePaymentSignatureHeader;
-  const originalProcess = x402HTTPClient.prototype.processPaymentResult;
+  const originalProcess = (x402HTTPClient.prototype as unknown as { processPaymentResult?: () => Promise<unknown> }).processPaymentResult;
 
   x402Client.prototype.createPaymentPayload = async () => ({ type: "payload" }) as never;
   x402HTTPClient.prototype.getPaymentRequiredResponse = () => ({}) as never;
   x402HTTPClient.prototype.encodePaymentSignatureHeader = () => ({}) as never;
-  x402HTTPClient.prototype.processPaymentResult = async () => ({ recovered: false }) as never;
+  (x402HTTPClient.prototype as unknown as { processPaymentResult: () => Promise<unknown> }).processPaymentResult = async () => ({ recovered: false }) as never;
 
   try {
     const fetcher = marcFetch({
@@ -112,6 +114,8 @@ test("marcFetch stops retrying after the configured payment-attempt limit", asyn
     x402Client.prototype.createPaymentPayload = originalCreatePayload;
     x402HTTPClient.prototype.getPaymentRequiredResponse = originalGetPaymentRequiredResponse;
     x402HTTPClient.prototype.encodePaymentSignatureHeader = originalEncode;
-    x402HTTPClient.prototype.processPaymentResult = originalProcess;
+    if (originalProcess) {
+      (x402HTTPClient.prototype as unknown as { processPaymentResult: () => Promise<unknown> }).processPaymentResult = originalProcess;
+    }
   }
 });

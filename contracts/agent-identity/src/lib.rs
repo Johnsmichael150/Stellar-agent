@@ -1,5 +1,8 @@
 #![no_std]
-use soroban_sdk::{contract, contractevent, contractimpl, contracttype, contracterror, Address, Env, String};
+use soroban_sdk::{
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
+    Env, String, Vec,
+};
 
 const MAX_METADATA_URI_LEN: u32 = 256;
 
@@ -192,11 +195,8 @@ impl AgentIdentityContract {
     }
 
     /// Fetch an agent by id.
-    pub fn get_agent(env: Env, id: u64) -> Agent {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Agent(id))
-            .unwrap_or_else(|| panic_with_error!(&env, Error::AgentNotFound))
+    pub fn get_agent(env: Env, id: u64) -> Option<Agent> {
+        env.storage().persistent().get(&DataKey::Agent(id))
     }
 
     /// Look up the agent id owned by `owner`, if any.

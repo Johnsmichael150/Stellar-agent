@@ -569,9 +569,6 @@ app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
 
 // --- Freighter wallet endpoints: build unsigned XDR ---
 
-const identityContract = new Contract(cfg.identityContract);
-const commerceContract = new Contract(cfg.commerceContract);
-
 const pendingTxHashes = new Set<string>();
 
 /** Build an unsigned, simulated transaction and return its XDR */
@@ -623,14 +620,14 @@ app.post("/api/build/createJob", optionalAuthMiddleware, async (req, res) => {
 
     const op = commerceContract.call(
       "create_job",
-      new Address(publicKey).toScVal(),
+      new Address(parsed.publicKey).toScVal(),
       new Address(providerAddr).toScVal(),
       new Address(evaluatorAddr).toScVal(),
       new Address(cfg.usdcToken).toScVal(),
       nativeToScVal(budgetBn, { type: "i128" }),
-      nativeToScVal(description || "Dashboard test job", { type: "string" }),
+      nativeToScVal(parsed.description || "Dashboard test job", { type: "string" }),
     );
-    const txXdr = await buildTxXdr(publicKey, op);
+    const txXdr = await buildTxXdr(parsed.publicKey, op);
     res.json({ xdr: txXdr });
   } catch (err: unknown) {
     if (respondWithValidationError(err, res)) return;

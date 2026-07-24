@@ -113,18 +113,22 @@ pub struct AgenticCommerceContract;
 #[contractimpl]
 impl AgenticCommerceContract {
     /// Initializer. Sets admin, treasury, default fee (1%), and job id counter.
-    /// Can be re-called by the existing admin to update treasury/fee params.
-    /// Panics if already initialized and caller is not the admin.
+    /// Panics if the contract has already been initialized.
     pub fn init(env: Env, admin: Address, treasury: Address) {
         admin.require_auth();
-        if env.storage().instance().has(&DataKey::Admin) {
-            let current_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-            if admin != current_admin {
-                panic!("not admin");
-            }
-        } else {
+        if !env.storage().instance().has(&DataKey::Admin) {
             env.storage().instance().set(&DataKey::NextId, &1u64);
+            env.storage().instance().set(&DataKey::Admin, &admin);
+            env.storage().instance().set(&DataKey::Treasury, &treasury);
+            env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
+            return;
         }
+
+        let current_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != current_admin {
+            panic!("not admin");
+        }
+
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);

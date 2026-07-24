@@ -2,7 +2,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import path from "path";
 import { fileURLToPath } from "url";
 import { z, ZodError } from "zod";
-import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative } from "@stellar/stellar-sdk";
+import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey } from "@stellar/stellar-sdk";
 import { cfg, buyerKeypair, sellerKeypair, getKeypair, DEMO_MODE } from "./lib/config.js";
 import {
   getAllAgents,
@@ -14,6 +14,15 @@ import {
   events,
   getFeeBps,
 } from "./lib/discovery.js";
+import {
+  generateNonce,
+  verifyNonceSignature,
+  createSession,
+  verifySession,
+  invalidateSession,
+  requireAuth,
+  requireMatchingWallet,
+} from "./lib/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -41,6 +50,8 @@ const allowedOrigins = new Set(
 );
 
 function isStellarAddress(value: string): boolean {
+  if (typeof value !== "string") return false;
+  if (!StrKey.isValidEd25519PublicKey(value)) return false;
   try {
     new Address(value);
     return true;
@@ -119,10 +130,19 @@ function parseBudget(value: string | number | undefined, defaultValue = 10_000_0
 
 function respondWithValidationError(err: unknown, res: Response): boolean {
   if (err instanceof ZodError) {
-    res.status(400).json({ error: "Invalid request payload", details: (err as ZodError).issues });
+    res.status(400).json({ error: "Invalid request payload", details: err.issues });
     return true;
   }
   return false;
+}
+
+function handleRouteError(err: unknown, res: Response): void {
+  if (respondWithValidationError(err, res)) return;
+  if (err instanceof Error && err.message === "Invalid wallet") {
+    res.status(400).json({ error: "Invalid wallet" });
+    return;
+  }
+  res.status(500).json({ error: (err as Error).message });
 }
 
 function corsOriginHandler(req: Request, res: Response, next: NextFunction) {
@@ -143,6 +163,100 @@ app.options("*", (_req, res) => res.sendStatus(204));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/healthz", (_req, res) => res.send("ok"));
+
+// --- Authentication Endpoints ---
+
+/** GET /api/auth/challenge — Request a nonce to sign for wallet verification */
+app.get("/api/auth/challenge", (req, res) => {
+  try {
+    const publicKeySchema = z.object({
+      publicKey: stellarAddressSchema,
+    });
+    const parsed = publicKeySchema.parse(req.query);
+    const nonce = generateNonce(parsed.publicKey);
+    res.json({
+      nonce,
+      message: `Sign this nonce to authenticate: ${nonce}`,
+    });
+  } catch (err: unknown) {
+    if (respondWithValidationError(err, res)) return;
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/auth/verify — Verify signed nonce and receive session token.
+ * Body: { publicKey, nonce, signedXdr }
+ */
+app.post("/api/auth/verify", (req, res) => {
+  try {
+    const authSchema = z.object({
+      publicKey: stellarAddressSchema,
+      nonce: z.string().min(1),
+      signedXdr: z.string().min(1),
+    });
+    const parsed = authSchema.parse(req.body);
+
+    // Verify the signature proves wallet ownership
+    if (!verifyNonceSignature(parsed.publicKey, parsed.nonce, parsed.signedXdr)) {
+      res.status(401).json({ error: "Invalid signature or expired nonce" });
+      return;
+    }
+
+    // Create authenticated session
+    const token = createSession(parsed.publicKey);
+    res.json({ token, publicKey: parsed.publicKey });
+  } catch (err: unknown) {
+    if (respondWithValidationError(err, res)) return;
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+/** POST /api/auth/logout — Invalidate session token */
+app.post("/api/auth/logout", (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token) {
+      invalidateSession(token);
+    }
+    res.json({ success: true });
+  } catch (err: unknown) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * Middleware: Require auth except in DEMO_MODE.
+ * In DEMO_MODE, auth is optional to allow testing without Freighter.
+ * In production, all state-changing operations require wallet authentication.
+ */
+function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction) {
+  if (DEMO_MODE) {
+    // In demo mode, auth is optional - allow demo wallets to bypass
+    const wallet = req.body.wallet || req.body.publicKey;
+    if (wallet === "buyer" || wallet === "seller") {
+      // Demo wallet - no auth needed
+      (req as any).walletAddress = getKeypair(wallet).publicKey();
+      return next();
+    }
+  }
+
+  // In production or for unknown wallets, require auth
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) {
+    res.status(401).json({ error: "Authentication required. Use /api/auth/challenge and /api/auth/verify to authenticate." });
+    return;
+  }
+
+  const publicKey = verifySession(token);
+  if (!publicKey) {
+    res.status(401).json({ error: "Invalid or expired authentication token" });
+    return;
+  }
+
+  (req as any).walletAddress = publicKey;
+  next();
+}
 
 // --- Helpers ---
 
@@ -310,7 +424,7 @@ app.get("/api/agents", async (_req, res) => {
 });
 
 // POST /api/agents/register
-app.post("/api/agents/register", async (req, res) => {
+app.post("/api/agents/register", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = registerAgentSchema.parse(req.body);
     if (parsed.wallet === "freighter") {
@@ -328,8 +442,7 @@ app.post("/api/agents/register", async (req, res) => {
     invalidateAgents();
     res.json({ agentId: agentId.toString() });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -349,7 +462,7 @@ app.get("/api/jobs", async (req, res) => {
 });
 
 // POST /api/jobs/create
-app.post("/api/jobs/create", async (req, res) => {
+app.post("/api/jobs/create", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = createJobSchema.parse(req.body);
     const { wallet, provider, evaluator, budget, description } = parsed;
@@ -375,13 +488,12 @@ app.post("/api/jobs/create", async (req, res) => {
     invalidateJobs();
     res.json({ jobId: jobId.toString() });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
 // POST /api/jobs/:id/submit
-app.post("/api/jobs/:id/submit", async (req, res) => {
+app.post("/api/jobs/:id/submit", optionalAuthMiddleware, async (req, res) => {
   try {
     const params = numericIdParamSchema.parse(req.params);
     const parsed = submitJobSchema.parse(req.body);
@@ -390,13 +502,12 @@ app.post("/api/jobs/:id/submit", async (req, res) => {
     invalidateJobs();
     res.json({ success: true });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
 // POST /api/jobs/:id/complete
-app.post("/api/jobs/:id/complete", async (req, res) => {
+app.post("/api/jobs/:id/complete", optionalAuthMiddleware, async (req, res) => {
   try {
     const params = numericIdParamSchema.parse(req.params);
     const parsed = walletOnlySchema.parse(req.body);
@@ -405,13 +516,12 @@ app.post("/api/jobs/:id/complete", async (req, res) => {
     invalidateJobs();
     res.json({ success: true });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
 // POST /api/jobs/:id/cancel
-app.post("/api/jobs/:id/cancel", async (req, res) => {
+app.post("/api/jobs/:id/cancel", optionalAuthMiddleware, async (req, res) => {
   try {
     const params = numericIdParamSchema.parse(req.params);
     const parsed = walletOnlySchema.parse(req.body);
@@ -420,14 +530,13 @@ app.post("/api/jobs/:id/cancel", async (req, res) => {
     invalidateJobs();
     res.json({ success: true });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
 // PUT /api/jobs/:id — cancel a job; builds unsigned XDR when publicKey provided,
 // or invokes directly when wallet (server keypair) is provided.
-app.put("/api/jobs/:id", async (req, res) => {
+app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
   try {
     const { action, publicKey, wallet } = req.body;
     if (action !== "cancel") {
@@ -437,13 +546,14 @@ app.put("/api/jobs/:id", async (req, res) => {
     const jobId = BigInt(req.params.id);
 
     if (publicKey) {
+      const validPublicKey = stellarAddressSchema.parse(publicKey);
       // Freighter path: return unsigned XDR for client-side signing
       const op = commerceContract.call(
         "cancel",
-        new Address(publicKey).toScVal(),
+        new Address(validPublicKey).toScVal(),
         nativeToScVal(jobId, { type: "u64" }),
       );
-      const txXdr = await buildTxXdr(publicKey, op);
+      const txXdr = await buildTxXdr(validPublicKey, op);
       res.json({ xdr: txXdr });
     } else {
       // Server-keypair path: sign and submit directly
@@ -453,11 +563,16 @@ app.put("/api/jobs/:id", async (req, res) => {
       res.json({ success: true });
     }
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
 // --- Freighter wallet endpoints: build unsigned XDR ---
+
+const identityContract = new Contract(cfg.identityContract);
+const commerceContract = new Contract(cfg.commerceContract);
+
+const pendingTxHashes = new Set<string>();
 
 /** Build an unsigned, simulated transaction and return its XDR */
 async function buildTxXdr(publicKey: string, op: xdr.Operation): Promise<string> {
@@ -470,11 +585,13 @@ async function buildTxXdr(publicKey: string, op: xdr.Operation): Promise<string>
     .setTimeout(30)
     .build();
   const prepared = await server.prepareTransaction(tx);
+  const hash = prepared.hash().toString("hex");
+  pendingTxHashes.add(hash);
   return prepared.toXDR();
 }
 
 // POST /api/build/register — build unsigned register agent tx
-app.post("/api/build/register", async (req, res) => {
+app.post("/api/build/register", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = buildRegisterSchema.parse(req.body);
     const op = identityContract.call(
@@ -491,13 +608,12 @@ app.post("/api/build/register", async (req, res) => {
 });
 
 // POST /api/build/createJob — build unsigned create_job tx
-app.post("/api/build/createJob", async (req, res) => {
+app.post("/api/build/createJob", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = buildCreateJobSchema.parse(req.body);
-    const { publicKey, provider, evaluator, budget, description } = parsed;
-    const providerAddr = provider || sellerKeypair.publicKey();
-    const evaluatorAddr = evaluator || publicKey;
-    const budgetBn = BigInt(budget || 10_000_000);
+    const providerAddr = parsed.provider || sellerKeypair.publicKey();
+    const evaluatorAddr = parsed.evaluator || parsed.publicKey;
+    const budgetBn = parseBudget(parsed.budget);
 
     const agentId = await identity.agentOf(providerAddr);
     if (agentId === null) {
@@ -523,7 +639,7 @@ app.post("/api/build/createJob", async (req, res) => {
 });
 
 // POST /api/build/submit — build unsigned submit tx
-app.post("/api/build/submit", async (req, res) => {
+app.post("/api/build/submit", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = buildUnsignedActionSchema.parse(req.body);
     const op = commerceContract.call(
@@ -541,7 +657,7 @@ app.post("/api/build/submit", async (req, res) => {
 });
 
 // POST /api/build/complete — build unsigned complete tx
-app.post("/api/build/complete", async (req, res) => {
+app.post("/api/build/complete", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = buildUnsignedActionSchema.parse(req.body);
     const op = commerceContract.call(
@@ -558,7 +674,7 @@ app.post("/api/build/complete", async (req, res) => {
 });
 
 // POST /api/build/cancel — build unsigned cancel tx
-app.post("/api/build/cancel", async (req, res) => {
+app.post("/api/build/cancel", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = buildUnsignedActionSchema.parse(req.body);
     const op = commerceContract.call(
@@ -575,10 +691,17 @@ app.post("/api/build/cancel", async (req, res) => {
 });
 
 // POST /api/submit — submit a Freighter-signed transaction
-app.post("/api/submit", async (req, res) => {
+app.post("/api/submit", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = submitXdrSchema.parse(req.body);
     const tx = TransactionBuilder.fromXDR(parsed.signedXdr, cfg.networkPassphrase);
+    const submitHash = tx.hash().toString("hex");
+    if (!pendingTxHashes.has(submitHash)) {
+      res.status(400).json({ error: "Transaction XDR was not generated by this server" });
+      return;
+    }
+    pendingTxHashes.delete(submitHash);
+
     const sent = await server.sendTransaction(tx);
     if (sent.status === "ERROR") {
       throw new Error(`submit failed: ${sent.errorResult}`);
@@ -634,7 +757,7 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
     return res.status(400).json({ error: "Malformed JSON payload" });
   }
   if (err instanceof ZodError) {
-    return res.status(400).json({ error: "Invalid request payload", details: (err as ZodError).issues });
+      return res.status(400).json({ error: "Invalid request payload", details: err.issues });
   }
   console.error("Unhandled server error:", err);
   res.status(500).json({ error: "Internal server error" });

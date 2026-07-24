@@ -1,6 +1,6 @@
 use super::*;
-use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{Address, Env, String};
+use soroban_sdk::testutils::{Address as _, Events as _};
+use soroban_sdk::{Address, Env, Event, String};
 
 /// register() must return the new agent's id directly so callers never need a
 /// follow-up agentOf() query to learn the assigned id.
@@ -45,12 +45,46 @@ fn register_assigns_sequential_ids_and_stores_agent() {
     assert_eq!(id_a, 1);
     assert_eq!(id_b, 2);
 
-    let agent_a = client.get_agent(&id_a).unwrap();
+    let agent_a = client.get_agent(&id_a);
     assert_eq!(agent_a.owner, alice);
     assert_eq!(agent_a.uri, uri_a);
 
     assert_eq!(client.agent_of(&alice), Some(1u64));
     assert_eq!(client.agent_of(&bob), Some(2u64));
+}
+
+#[test]
+fn register_emits_registered_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://alice.json"));
+
+    let expected_event = Registered {
+        owner: alice,
+        agent_id: id,
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&contract_id),
+        [expected_event.to_xdr(&env, &contract_id)],
+    );
+}
+
+#[test]
+#[should_panic(expected = "AlreadyRegistered")]
+fn register_rejects_already_registered_address() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let uri = String::from_str(&env, "ipfs://alice.json");
+    client.register(&alice, &uri);
+    client.register(&alice, &uri);
 }
 
 #[test]
@@ -64,7 +98,7 @@ fn update_uri_changes_the_agent_uri() {
     let id = client.register(&alice, &String::from_str(&env, "ipfs://a1.json"));
     client.update_uri(&alice, &id, &String::from_str(&env, "ipfs://a2.json"));
 
-    let agent = client.get_agent(&id).unwrap();
+    let agent = client.get_agent(&id);
     assert_eq!(agent.uri, String::from_str(&env, "ipfs://a2.json"));
 }
 
@@ -83,6 +117,7 @@ fn update_uri_rejects_non_owner() {
 }
 
 #[test]
+#[should_panic(expected = "AgentNotFound")]
 fn deregister_removes_agent_and_owner_lookup() {
     let env = Env::default();
     env.mock_all_auths();
@@ -93,7 +128,7 @@ fn deregister_removes_agent_and_owner_lookup() {
     let id = client.register(&alice, &String::from_str(&env, "ipfs://a.json"));
     client.deregister(&alice, &id);
 
-    assert!(client.get_agent(&id).is_none());
+    client.get_agent(&id);
     assert_eq!(client.agent_of(&alice), None);
 }
 
@@ -158,6 +193,106 @@ fn update_owner_rejects_new_owner_already_registered() {
     client.register(&bob, &String::from_str(&env, "ipfs://bob.json"));
     let id_a = client.agent_of(&alice).unwrap();
     client.update_owner(&alice, &id_a, &bob);
+}
+
+#[test]
+#[should_panic(expected = "metadata_uri cannot be empty")]
+fn register_rejects_empty_uri() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    client.register(&alice, &String::from_str(&env, ""));
+}
+
+#[test]
+#[should_panic(expected = "metadata_uri too long")]
+fn register_rejects_uri_longer_than_256_chars() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let uri = String::from_str(&env, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    client.register(&alice, &uri);
+}
+
+#[test]
+#[should_panic(expected = "metadata_uri too long")]
+fn update_uri_rejects_uri_longer_than_256_chars() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://a1.json"));
+    let uri = String::from_str(&env, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    client.update_uri(&alice, &id, &uri);
+}
+
+#[test]
+fn registered_count_tracks_live_registrations() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    assert_eq!(client.registered_count(), 0);
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let id_a = client.register(&alice, &String::from_str(&env, "ipfs://alice.json"));
+    assert_eq!(client.registered_count(), 1);
+
+    client.register(&bob, &String::from_str(&env, "ipfs://bob.json"));
+    assert_eq!(client.registered_count(), 2);
+
+    client.deregister(&alice, &id_a);
+    assert_eq!(client.registered_count(), 1);
+}
+
+#[test]
+fn list_agents_returns_page_of_existing_agents() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let carol = Address::generate(&env);
+    client.register(&alice, &String::from_str(&env, "ipfs://alice.json"));
+    client.register(&bob, &String::from_str(&env, "ipfs://bob.json"));
+    let id_carol = client.register(&carol, &String::from_str(&env, "ipfs://carol.json"));
+
+    // All 3 from start_id=1, limit=10
+    let page = client.list_agents(&1u32, &10u32);
+    assert_eq!(page.len(), 3);
+
+    // Deregister bob (id=2); listing skips the gap
+    client.deregister(&bob, &2u64);
+    let page2 = client.list_agents(&1u32, &10u32);
+    assert_eq!(page2.len(), 2);
+
+    // Paging: start at id=3, limit=1 → only carol
+    let page3 = client.list_agents(&3u32, &1u32);
+    assert_eq!(page3.len(), 1);
+    assert_eq!(page3.get(0).unwrap().id, id_carol);
+}
+
+#[test]
+fn list_agents_empty_range_returns_empty_vec() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let page = client.list_agents(&1u32, &5u32);
+    assert_eq!(page.len(), 0);
 }
 
 #[test]

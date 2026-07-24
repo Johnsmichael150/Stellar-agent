@@ -1,5 +1,14 @@
 #![no_std]
-use soroban_sdk::{contract, contractevent, contractimpl, contracttype, Address, Env, String};
+use soroban_sdk::{contract, contractevent, contractimpl, contracttype, contracterror, Address, Env, String};
+
+const MAX_METADATA_URI_LEN: u32 = 256;
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    AgentNotFound = 1,
+    AlreadyRegistered = 2,
+}
 
 /// A registered agent in the MARC agent-identity registry.
 #[derive(Clone)]
@@ -13,6 +22,7 @@ pub struct Agent {
 #[contracttype]
 enum DataKey {
     NextId,
+    RegisteredCount,
     Agent(u64),
     OwnerToId(Address),
 }
@@ -59,15 +69,29 @@ pub struct AgentIdentityContract;
 impl AgentIdentityContract {
     /// Register a new agent owned by `owner`. Caller must sign for `owner`.
     /// Returns the newly-assigned sequential agent id (starts at 1).
+    ///
+    /// # ID Semantics
+    ///
+    /// Agent IDs are **append-only**. Once assigned, an ID is never reused,
+    /// even if the corresponding agent is later deregistered. `next_id`
+    /// therefore represents the total number of registrations ever performed,
+    /// not the current number of active agents.
     pub fn register(env: Env, owner: Address, uri: String) -> u64 {
         owner.require_auth();
+
+        if uri.len() == 0 {
+            panic!("metadata_uri cannot be empty");
+        }
+        if uri.len() > MAX_METADATA_URI_LEN {
+            panic!("metadata_uri too long");
+        }
 
         if env
             .storage()
             .persistent()
             .has(&DataKey::OwnerToId(owner.clone()))
         {
-            panic!("owner already registered");
+            panic_with_error!(&env, Error::AlreadyRegistered);
         }
 
         let next: u64 = env
@@ -89,6 +113,15 @@ impl AgentIdentityContract {
             .instance()
             .set(&DataKey::NextId, &next.checked_add(1).expect("agent id overflow"));
 
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RegisteredCount)
+            .unwrap_or(0u32);
+        env.storage()
+            .instance()
+            .set(&DataKey::RegisteredCount, &count.checked_add(1).expect("count overflow"));
+
         Registered {
             owner,
             agent_id: next,
@@ -101,6 +134,12 @@ impl AgentIdentityContract {
     /// Update the metadata URI of an agent. Caller must be the current owner.
     pub fn update_uri(env: Env, caller: Address, id: u64, new_uri: String) {
         caller.require_auth();
+        if new_uri.len() == 0 {
+            panic!("metadata_uri cannot be empty");
+        }
+        if new_uri.len() > MAX_METADATA_URI_LEN {
+            panic!("metadata_uri too long");
+        }
         let mut agent: Agent = env
             .storage()
             .persistent()
@@ -136,6 +175,15 @@ impl AgentIdentityContract {
             .persistent()
             .remove(&DataKey::OwnerToId(agent.owner.clone()));
 
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RegisteredCount)
+            .unwrap_or(0u32);
+        env.storage()
+            .instance()
+            .set(&DataKey::RegisteredCount, &count.saturating_sub(1));
+
         Deregistered {
             owner: agent.owner,
             agent_id: id,
@@ -144,8 +192,11 @@ impl AgentIdentityContract {
     }
 
     /// Fetch an agent by id.
-    pub fn get_agent(env: Env, id: u64) -> Option<Agent> {
-        env.storage().persistent().get(&DataKey::Agent(id))
+    pub fn get_agent(env: Env, id: u64) -> Agent {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Agent(id))
+            .unwrap_or_else(|| panic_with_error!(&env, Error::AgentNotFound))
     }
 
     /// Look up the agent id owned by `owner`, if any.
@@ -192,6 +243,34 @@ impl AgentIdentityContract {
             agent_id: id,
         }
         .publish(&env);
+    }
+
+    /// Returns up to `limit` agents starting from `start_id`, skipping gaps left
+    /// by deregistered agents. Useful for paginated dashboard queries.
+    pub fn list_agents(env: Env, start_id: u32, limit: u32) -> Vec<Agent> {
+        let mut result = Vec::new(&env);
+        let next_id: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NextId)
+            .unwrap_or(1u64);
+
+        let mut id = start_id as u64;
+        while result.len() < limit && id < next_id {
+            if let Some(agent) = env.storage().persistent().get(&DataKey::Agent(id)) {
+                result.push_back(agent);
+            }
+            id += 1;
+        }
+        result
+    }
+
+    /// Returns the number of currently-registered (non-deregistered) agents.
+    pub fn registered_count(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::RegisteredCount)
+            .unwrap_or(0u32)
     }
 
     /// Contract version. Bump on ABI changes.

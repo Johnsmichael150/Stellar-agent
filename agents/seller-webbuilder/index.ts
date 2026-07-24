@@ -17,10 +17,11 @@ const publicUrl = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace
 const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 async function generate(prompt: string): Promise<string> {
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.7,
   });

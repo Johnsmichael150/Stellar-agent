@@ -17,6 +17,7 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, "research.json");
 const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 interface ResearchOutput {
   summary: string;
@@ -34,7 +35,7 @@ const DEPTH_CONFIG: Record<ResearchDepth, { sourceRange: string; detail: string 
 async function generate(task: string, depth: ResearchDepth = "standard"): Promise<ResearchOutput> {
   const { sourceRange, detail } = DEPTH_CONFIG[depth];
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [
       {
         role: "user",

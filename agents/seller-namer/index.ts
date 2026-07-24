@@ -17,10 +17,11 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, "names.md");
 const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 async function generate(prompt: string): Promise<string> {
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [{ role: "user", content: prompt }],
   });
   return res.choices[0].message.content ?? "";

@@ -12,6 +12,7 @@
  */
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { Keypair, scValToNative, xdr } from "@stellar/stellar-sdk";
 import {
   IdentityClient,
@@ -103,11 +104,13 @@ async function startSeller(kp: Keypair, index: number): Promise<{ agent: Agent; 
 
   const port = BASE_PORT + index;
   const app = express();
+  app.use(cors());
 
   app.use("/api/work", marcPaywall({
     payTo: kp.publicKey(),
     price: "$0.01",
     network: "stellar:testnet",
+    token: cfg.usdcToken,
     description: `Work from seller-${index}`,
     facilitatorUrl: process.env.X402_FACILITATOR_URL,
     facilitatorApiKey: process.env.X402_FACILITATOR_API_KEY,

@@ -54,7 +54,11 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Payment, X-Payment-Response",
+      "Content-Type, Authorization, X-Payment, X-Payment-Response, Payment-Signature, Payment-Response",
+    );
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "PAYMENT-RESPONSE, X-PAYMENT-RESPONSE, PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
     );
     res.setHeader("Access-Control-Max-Age", "86400");
 
@@ -107,7 +111,27 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
   return (req, res, next) => {
     corsPreflightHandler(req, res, (err?: unknown) => {
       if (err) return next(err);
-      paywall(req, res, next);
+
+      const originalSetHeader = res.setHeader;
+      res.setHeader = function (name: string, value: string | number | readonly string[]) {
+        const lower = name.toLowerCase();
+        if (lower === "payment-response" && !res.getHeader("X-PAYMENT-RESPONSE")) {
+          originalSetHeader.call(this, "X-PAYMENT-RESPONSE", value);
+        } else if (lower === "x-payment-response" && !res.getHeader("PAYMENT-RESPONSE")) {
+          originalSetHeader.call(this, "PAYMENT-RESPONSE", value);
+        }
+        return originalSetHeader.call(this, name, value);
+      };
+
+      paywall(req, res, (paywallErr?: unknown) => {
+        if (paywallErr) return next(paywallErr);
+
+        const paymentResp = res.getHeader("PAYMENT-RESPONSE") ?? res.getHeader("payment-response");
+        if (paymentResp && !res.getHeader("X-PAYMENT-RESPONSE")) {
+          res.setHeader("X-PAYMENT-RESPONSE", paymentResp as string);
+        }
+        next();
+      });
     });
   };
 }

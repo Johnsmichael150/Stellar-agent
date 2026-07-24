@@ -2,7 +2,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import path from "path";
 import { fileURLToPath } from "url";
 import { z, ZodError } from "zod";
-import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative } from "@stellar/stellar-sdk";
+import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey } from "@stellar/stellar-sdk";
 import { cfg, buyerKeypair, sellerKeypair, getKeypair, DEMO_MODE } from "./lib/config.js";
 import {
   getAllAgents,
@@ -47,6 +47,8 @@ const allowedOrigins = new Set(
 );
 
 function isStellarAddress(value: string): boolean {
+  if (typeof value !== "string") return false;
+  if (!StrKey.isValidEd25519PublicKey(value)) return false;
   try {
     new Address(value);
     return true;
@@ -123,6 +125,15 @@ function respondWithValidationError(err: unknown, res: Response): boolean {
     return true;
   }
   return false;
+}
+
+function handleRouteError(err: unknown, res: Response): void {
+  if (respondWithValidationError(err, res)) return;
+  if (err instanceof Error && err.message === "Invalid wallet") {
+    res.status(400).json({ error: "Invalid wallet" });
+    return;
+  }
+  res.status(500).json({ error: (err as Error).message });
 }
 
 function corsOriginHandler(req: Request, res: Response, next: NextFunction) {
@@ -412,8 +423,7 @@ app.post("/api/agents/register", optionalAuthMiddleware, async (req, res) => {
     invalidateAgents();
     res.json({ agentId: agentId.toString() });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -458,8 +468,7 @@ app.post("/api/jobs/create", optionalAuthMiddleware, async (req, res) => {
     invalidateJobs();
     res.json({ jobId: jobId.toString() });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -473,8 +482,7 @@ app.post("/api/jobs/:id/submit", optionalAuthMiddleware, async (req, res) => {
     invalidateJobs();
     res.json({ success: true });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -488,8 +496,7 @@ app.post("/api/jobs/:id/complete", optionalAuthMiddleware, async (req, res) => {
     invalidateJobs();
     res.json({ success: true });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -503,8 +510,7 @@ app.post("/api/jobs/:id/cancel", optionalAuthMiddleware, async (req, res) => {
     invalidateJobs();
     res.json({ success: true });
   } catch (err: unknown) {
-    if (respondWithValidationError(err, res)) return;
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -520,13 +526,14 @@ app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
     const jobId = BigInt(req.params.id);
 
     if (publicKey) {
+      const validPublicKey = stellarAddressSchema.parse(publicKey);
       // Freighter path: return unsigned XDR for client-side signing
       const op = commerceContract.call(
         "cancel",
-        new Address(publicKey).toScVal(),
+        new Address(validPublicKey).toScVal(),
         nativeToScVal(jobId, { type: "u64" }),
       );
-      const txXdr = await buildTxXdr(publicKey, op);
+      const txXdr = await buildTxXdr(validPublicKey, op);
       res.json({ xdr: txXdr });
     } else {
       // Server-keypair path: sign and submit directly
@@ -536,7 +543,7 @@ app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
       res.json({ success: true });
     }
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error).message });
+    handleRouteError(err, res);
   }
 });
 
@@ -544,6 +551,8 @@ app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
 
 const identityContract = new Contract(cfg.identityContract);
 const commerceContract = new Contract(cfg.commerceContract);
+
+const pendingTxHashes = new Set<string>();
 
 /** Build an unsigned, simulated transaction and return its XDR */
 async function buildTxXdr(publicKey: string, op: xdr.Operation): Promise<string> {
@@ -556,6 +565,8 @@ async function buildTxXdr(publicKey: string, op: xdr.Operation): Promise<string>
     .setTimeout(30)
     .build();
   const prepared = await server.prepareTransaction(tx);
+  const hash = prepared.hash().toString("hex");
+  pendingTxHashes.add(hash);
   return prepared.toXDR();
 }
 
@@ -579,10 +590,10 @@ app.post("/api/build/register", optionalAuthMiddleware, async (req, res) => {
 // POST /api/build/createJob — build unsigned create_job tx
 app.post("/api/build/createJob", optionalAuthMiddleware, async (req, res) => {
   try {
-    const { publicKey, provider, evaluator, budget, description } = req.body;
-    const providerAddr = provider || sellerKeypair.publicKey();
-    const evaluatorAddr = evaluator || publicKey;
-    const budgetBn = BigInt(budget || 10_000_000);
+    const parsed = buildCreateJobSchema.parse(req.body);
+    const providerAddr = parsed.provider || sellerKeypair.publicKey();
+    const evaluatorAddr = parsed.evaluator || parsed.publicKey;
+    const budgetBn = parseBudget(parsed.budget);
 
     const agentId = await identity.agentOf(providerAddr);
     if (agentId === null) {
@@ -592,14 +603,14 @@ app.post("/api/build/createJob", optionalAuthMiddleware, async (req, res) => {
 
     const op = commerceContract.call(
       "create_job",
-      new Address(publicKey).toScVal(),
+      new Address(parsed.publicKey).toScVal(),
       new Address(providerAddr).toScVal(),
       new Address(evaluatorAddr).toScVal(),
       new Address(cfg.usdcToken).toScVal(),
       nativeToScVal(budgetBn, { type: "i128" }),
-      nativeToScVal(description || "Dashboard test job", { type: "string" }),
+      nativeToScVal(parsed.description || "Dashboard test job", { type: "string" }),
     );
-    const txXdr = await buildTxXdr(publicKey, op);
+    const txXdr = await buildTxXdr(parsed.publicKey, op);
     res.json({ xdr: txXdr });
   } catch (err: unknown) {
     if (respondWithValidationError(err, res)) return;
@@ -664,6 +675,13 @@ app.post("/api/submit", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = submitXdrSchema.parse(req.body);
     const tx = TransactionBuilder.fromXDR(parsed.signedXdr, cfg.networkPassphrase);
+    const submitHash = tx.hash().toString("hex");
+    if (!pendingTxHashes.has(submitHash)) {
+      res.status(400).json({ error: "Transaction XDR was not generated by this server" });
+      return;
+    }
+    pendingTxHashes.delete(submitHash);
+
     const sent = await server.sendTransaction(tx);
     if (sent.status === "ERROR") {
       throw new Error(`submit failed: ${sent.errorResult}`);

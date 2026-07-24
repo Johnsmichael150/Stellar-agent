@@ -3,6 +3,7 @@ import blessed from "blessed";
 import { Keypair, Contract, Account, TransactionBuilder, BASE_FEE, Address, scValToNative, rpc } from "@stellar/stellar-sdk";
 import { IdentityClient, CommerceClient, TESTNET, type MarcConfig, type Job } from "marc-stellar-sdk";
 import { retryWithBackoff } from "../shared.js";
+import { watchFile, unwatchFile, readFileSync, existsSync } from "node:fs";
 
 const cfg: MarcConfig = {
   rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,
@@ -31,6 +32,8 @@ async function getUsdc(pubkey: string): Promise<string> {
 
 const buyer = Keypair.fromSecret(process.env.BUYER_SECRET!);
 const REGISTRY = "http://localhost:4500/agents";
+const POLL_INTERVAL_MS = 5000;
+const MAX_POLL_ATTEMPTS = 120; // 10 minutes
 
 const screen = blessed.screen({ smartCSR: true, title: "MARC Buyer Agent" });
 
@@ -130,6 +133,24 @@ function log(msg: string) {
 
 let agents: any[] = [];
 let selectedIndex = 0;
+let currentSellerLog: string | null = null;
+
+function watchSellerLog(picked: any) {
+  if (currentSellerLog) {
+    unwatchFile(currentSellerLog);
+  }
+  const sellerLog = `../agents/${picked.id}/seller.log`;
+  currentSellerLog = sellerLog;
+  let lastSize = 0;
+  watchFile(sellerLog, { interval: 1000 }, () => {
+    if (!existsSync(sellerLog)) return;
+    const content = readFileSync(sellerLog, "utf8");
+    const newContent = content.slice(lastSize);
+    lastSize = content.length;
+    newContent.split("\n").filter(Boolean).forEach((line) => sellerLogBox.log(line));
+    screen.render();
+  });
+}
 
 async function loadAgents() {
   try {
@@ -218,19 +239,8 @@ async function submitTask(task: string) {
   sellerLogBox.show();
   sellerLogBox.setLabel(` ${picked.name} Activity `);
 
-  // Tail seller log file
-  import("node:fs").then(({ watchFile, readFileSync, existsSync }) => {
-    const sellerLog = `../agents/${picked.id}/seller.log`;
-    let lastSize = 0;
-    watchFile(sellerLog, { interval: 1000 }, () => {
-      if (!existsSync(sellerLog)) return;
-      const content = readFileSync(sellerLog, "utf8");
-      const newContent = content.slice(lastSize);
-      lastSize = content.length;
-      newContent.split("\n").filter(Boolean).forEach((line) => sellerLogBox.log(line));
-      screen.render();
-    });
-  });
+  // Tail seller log file (closes any previous watcher first)
+  watchSellerLog(picked);
 
   screen.render();
 
@@ -271,9 +281,10 @@ async function submitTask(task: string) {
     log(`{cyan-fg}${picked.name} accepted the job — working...{/cyan-fg}`);
     log(`Waiting for deliverable...`);
 
-    // Poll for submission with retry on timeout
+    // Poll for submission with retry on timeout, bounded so a crashed seller can't hang the buyer forever
     let job: Job | null = null;
-    while (true) {
+    let pollAttempts = 0;
+    while (pollAttempts < MAX_POLL_ATTEMPTS) {
       try {
         job = await commerce.getJob(jobId);
         if (job?.status === "Submitted") {
@@ -281,7 +292,15 @@ async function submitTask(task: string) {
           break;
         }
       } catch { /* transient RPC error — retry */ }
-      await new Promise((r) => setTimeout(r, 5000));
+      pollAttempts++;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+
+    if (!job || job.status !== "Submitted") {
+      const minutes = Math.round((MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 60_000);
+      log(`{red-fg}Timed out after ${minutes} min waiting for ${picked.name} — cancelling job #${jobId}{/red-fg}`);
+      await commerce.cancel(buyer, jobId);
+      return;
     }
 
     // Validate deliverable before paying

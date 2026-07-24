@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import blessed from "blessed";
 import express from "express";
+import cors from "cors";
 import { Keypair, Contract, Account, TransactionBuilder, BASE_FEE, Address, scValToNative, rpc } from "@stellar/stellar-sdk";
 import { IdentityClient, CommerceClient, TESTNET, type MarcConfig } from "marc-stellar-sdk";
 
@@ -247,6 +248,7 @@ async function setupSeller(s: AgentState, index: number): Promise<number> {
   feed(`{cyan-fg}${s.label}{/cyan-fg} registered as agent #${s.agentId}`);
   const port = BASE_PORT + index;
   const app = express();
+  app.use(cors());
   app.get("/api/work", (_req, res) => res.json({ result: `Report from ${s.label}` }));
   await new Promise<void>((resolve) => app.listen(port, resolve));
   s.status = `ready (:${port})`; render();

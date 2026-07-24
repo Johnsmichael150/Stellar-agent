@@ -1,6 +1,6 @@
 use super::*;
-use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{Address, Env, String};
+use soroban_sdk::testutils::{Address as _, Events as _};
+use soroban_sdk::{Address, Env, Event, String};
 
 /// register() must return the new agent's id directly so callers never need a
 /// follow-up agentOf() query to learn the assigned id.
@@ -51,6 +51,26 @@ fn register_assigns_sequential_ids_and_stores_agent() {
 
     assert_eq!(client.agent_of(&alice), Some(1u64));
     assert_eq!(client.agent_of(&bob), Some(2u64));
+}
+
+#[test]
+fn register_emits_registered_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://alice.json"));
+
+    let expected_event = Registered {
+        owner: alice,
+        agent_id: id,
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&contract_id),
+        [expected_event.to_xdr(&env, &contract_id)],
+    );
 }
 
 #[test]
@@ -185,6 +205,33 @@ fn register_rejects_empty_uri() {
 
     let alice = Address::generate(&env);
     client.register(&alice, &String::from_str(&env, ""));
+}
+
+#[test]
+#[should_panic(expected = "metadata_uri too long")]
+fn register_rejects_uri_longer_than_256_chars() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let uri = String::from_str(&env, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    client.register(&alice, &uri);
+}
+
+#[test]
+#[should_panic(expected = "metadata_uri too long")]
+fn update_uri_rejects_uri_longer_than_256_chars() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://a1.json"));
+    let uri = String::from_str(&env, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    client.update_uri(&alice, &id, &uri);
 }
 
 #[test]

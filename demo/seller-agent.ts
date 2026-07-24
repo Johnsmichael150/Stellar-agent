@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { Keypair } from "@stellar/stellar-sdk";
 import { IdentityClient, CommerceClient, marcPaywall, TESTNET, type MarcConfig } from "marc-stellar-sdk";
 
@@ -44,6 +45,7 @@ if (!agentId) {
 
 // Step 2: Start x402 paywalled API
 const app = express();
+app.use(cors());
 
 app.use("/api/work", marcPaywall({
   payTo: seller.publicKey(),

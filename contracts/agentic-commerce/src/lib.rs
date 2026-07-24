@@ -156,6 +156,9 @@ impl AgenticCommerceContract {
         description: String,
     ) -> u64 {
         client_addr.require_auth();
+        if !env.storage().instance().has(&DataKey::Admin) {
+            panic!("not initialized");
+        }
         if budget <= 0 {
             panic!("budget must be positive");
         }

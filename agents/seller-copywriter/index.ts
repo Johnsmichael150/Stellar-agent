@@ -24,13 +24,14 @@ const AGENT_ID = "seller-copywriter";
 const OUTPUT_DIR = "output";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 let callCount = 0;
 
 async function generate(prompt: string): Promise<string> {
   callCount++;
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.9,
     seed: callCount + Date.now(),

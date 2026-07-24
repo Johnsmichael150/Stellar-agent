@@ -93,6 +93,13 @@ export class CommerceClient {
     budget: bigint,
     description: string,
   ): Promise<bigint> {
+    // Client-side guard: the contract rejects 0-budget jobs, but catching it
+    // here produces a clear JS error immediately rather than waiting for an
+    // RPC round-trip and decoding an opaque contract error code.
+    if (budget <= 0n) {
+      throw new Error(`createJob: budget must be greater than 0 (got ${budget})`);
+    }
+
     const op = this.contract.call(
       "create_job",
       new Address(client.publicKey()).toScVal(),

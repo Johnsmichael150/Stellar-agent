@@ -1,5 +1,6 @@
 import { Keypair } from "@stellar/stellar-sdk";
-import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { x402Client, x402HTTPClient } from "@x402/fetch";
+import { decodePaymentRequiredHeader } from "@x402/core/http";
 import { ExactStellarScheme } from "@x402/stellar/exact/client";
 import {
   createEd25519Signer,
@@ -27,6 +28,79 @@ export interface MarcFetchOptions {
   headers?: Record<string, string>;
   /** Optional callback invoked with payment lifecycle status for progress UI. */
   onPayment?: (status: PaymentStatus) => void;
+  /** Max time per HTTP attempt before aborting. Default: 30000 ms. */
+  timeoutMs?: number;
+  /** Max payment retries for the same (url, price) pair. Default: 1. */
+  maxPaymentAttempts?: number;
+  /** Optional fetch implementation override, useful for tests. */
+  fetchImpl?: typeof fetch;
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_PAYMENT_ATTEMPTS = 1;
+
+export interface ParsedPaymentRequired {
+  amount?: string;
+  asset?: string;
+}
+
+export function parsePaymentRequiredHeader(headerValue: string): ParsedPaymentRequired {
+  const decoded = decodePaymentRequiredHeader(headerValue);
+  const first = decoded.accepts?.[0];
+  return {
+    amount: first?.amount,
+    asset: first?.asset,
+  };
+}
+
+function withTimeout(fetchImpl: typeof fetch, timeoutMs: number): typeof fetch {
+  return async (input, init) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const mergedSignal = init?.signal;
+    const abortHandler = () => controller.abort();
+
+    if (mergedSignal) {
+      if (mergedSignal.aborted) controller.abort();
+      else mergedSignal.addEventListener("abort", abortHandler, { once: true });
+    }
+
+    try {
+      return await Promise.race([
+        fetchImpl(input, { ...init, signal: controller.signal }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            controller.abort();
+            reject(new Error(`marcFetch timeout after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+    } catch (err) {
+      if (controller.signal.aborted && err instanceof Error && err.message.includes("timeout")) {
+        throw err;
+      }
+      if (controller.signal.aborted) {
+        throw new Error(`marcFetch timeout after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+      if (mergedSignal) mergedSignal.removeEventListener("abort", abortHandler);
+    }
+  };
+}
+
+function mergeHeaders(
+  baseHeaders: Record<string, string> | undefined,
+  initHeaders: HeadersInit | undefined,
+  extraHeaders: Record<string, string> = {},
+): Headers {
+  const headers = new Headers(initHeaders);
+  if (baseHeaders) {
+    for (const [k, v] of Object.entries(baseHeaders)) headers.set(k, v);
+  }
+  for (const [k, v] of Object.entries(extraHeaders)) headers.set(k, v);
+  return headers;
 }
 
 /**
@@ -61,6 +135,9 @@ export function marcFetch(opts: MarcFetchOptions) {
     network = "testnet",
     headers: customHeaders,
     onPayment,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxPaymentAttempts = DEFAULT_MAX_PAYMENT_ATTEMPTS,
+    fetchImpl = fetch,
   } = opts;
 
   const caip2 =
@@ -73,44 +150,68 @@ export function marcFetch(opts: MarcFetchOptions) {
 
   const client = new x402Client();
   client.register(caip2, stellarScheme);
+  const httpClient = new x402HTTPClient(client);
+  const fetchWithTimeout = withTimeout(fetchImpl, timeoutMs);
+  const paymentAttemptCache = new Map<string, number>();
 
-  const baseFetch: typeof fetch = customHeaders
-    ? (input, init) =>
-        fetch(input, {
-          ...init,
-          headers: { ...customHeaders, ...(init?.headers as Record<string, string> | undefined) },
-        })
-    : fetch;
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const request = new Request(input, {
+      ...init,
+      headers: mergeHeaders(customHeaders, init?.headers),
+    });
 
-  if (onPayment) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const scheme = stellarScheme as any;
-    const originalBuildAndPay = scheme.pay?.bind(stellarScheme);
-    if (originalBuildAndPay) {
-      scheme.pay = async (...args: unknown[]) => {
-        onPayment("signing");
-        try {
-          const result = await originalBuildAndPay(...args);
-          onPayment("pending");
-          return result;
-        } catch (err) {
-          onPayment("failed");
-          throw err;
-        }
-      };
+    let response = await fetchWithTimeout(request.clone());
+    if (response.status !== 402) {
+      return response;
     }
-    // For other error status codes, return as-is without attempting payment parsing
+
+    while (response.status === 402) {
+      const requiredHeader = response.headers.get("PAYMENT-REQUIRED") ?? response.headers.get("X-PAYMENT-REQUIREMENTS");
+      if (!requiredHeader) {
+        throw new Error("402 response missing payment requirements header");
+      }
+
+      const parsed = parsePaymentRequiredHeader(requiredHeader);
+      const url = new URL(request.url).toString();
+      const cacheKey = `${url}|${parsed.asset ?? "unknown-asset"}|${parsed.amount ?? "unknown-amount"}`;
+      const attempts = paymentAttemptCache.get(cacheKey) ?? 0;
+      if (attempts >= maxPaymentAttempts) {
+        throw new Error(`max payment attempts reached for ${url}`);
+      }
+      paymentAttemptCache.set(cacheKey, attempts + 1);
+
+      const paymentRequired = httpClient.getPaymentRequiredResponse((name) => response.headers.get(name));
+
+      try {
+        onPayment?.("signing");
+        const payload = await client.createPaymentPayload(paymentRequired);
+        onPayment?.("pending");
+
+        const paymentHeaders = httpClient.encodePaymentSignatureHeader(payload);
+        const paidRequest = new Request(input, {
+          ...init,
+          headers: mergeHeaders(customHeaders, init?.headers, paymentHeaders),
+        });
+        paidRequest.headers.set("Access-Control-Expose-Headers", "PAYMENT-RESPONSE,X-PAYMENT-RESPONSE");
+
+        response = await fetchWithTimeout(paidRequest);
+        await httpClient.processPaymentResult(
+          payload,
+          (name) => response.headers.get(name),
+          response.status,
+        );
+
+        if (response.status !== 402) {
+          onPayment?.("settled");
+          paymentAttemptCache.delete(cacheKey);
+          return response;
+        }
+      } catch (err) {
+        onPayment?.("failed");
+        throw err;
+      }
+    }
+
     return response;
   };
-
-  // Note: onPayment callback is set up to track payment status, but x402-stellar v2.9.0
-  // doesn't expose payment lifecycle hooks on the scheme. The wrapFetchWithPayment function
-  // handles all payment automatically without exposing intermediate states.
-  // Future x402 versions may expose payment hooks for monitoring.
-  if (onPayment) {
-    // Log that callbacks are registered but not used by x402 in this version
-    onPayment("pending");
-  }
-
-  return wrapFetchWithPayment(wrappedFetch, client);
 }

@@ -12,7 +12,12 @@ const cfg: MarcConfig = {
 };
 
 const seller = Keypair.fromSecret(process.env.SELLER_SECRET!);
-const jobId = BigInt(process.env.JOB_ID!);
+
+const jobIdRaw = process.env.JOB_ID;
+if (jobIdRaw !== undefined && !/^\d+$/.test(jobIdRaw)) {
+  throw new Error(`JOB_ID must be a non-negative integer, got: "${jobIdRaw}"`);
+}
+const jobId = jobIdRaw !== undefined ? BigInt(jobIdRaw) : undefined;
 
 /**
  * Service price for the x402 paywall.

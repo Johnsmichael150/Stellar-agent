@@ -30,6 +30,9 @@ const server = new rpc.Server(cfg.rpcUrl, {
   allowHttp: cfg.rpcUrl.startsWith("http://"),
 });
 
+const identityContract = new Contract(cfg.identityContract);
+const commerceContract = new Contract(cfg.commerceContract);
+
 const allowedOrigins = new Set(
   (process.env.DASHBOARD_ORIGINS ?? "http://localhost:3000,http://127.0.0.1:3000")
     .split(",")
@@ -56,8 +59,14 @@ const numericIdParamSchema = z.object({
 });
 
 const registerAgentSchema = z.object({
-  wallet: stellarAddressSchema,
+  wallet: z.enum(["buyer", "seller", "freighter"]),
+  publicKey: stellarAddressSchema.optional(),
   uri: z.string().min(1).optional(),
+}).refine(data => {
+  if (data.wallet === "freighter" && !data.publicKey) {
+    throw new Error("publicKey is required when wallet is freighter");
+  }
+  return true;
 });
 
 const createJobSchema = z.object({
@@ -110,7 +119,7 @@ function parseBudget(value: string | number | undefined, defaultValue = 10_000_0
 
 function respondWithValidationError(err: unknown, res: Response): boolean {
   if (err instanceof ZodError) {
-    res.status(400).json({ error: "Invalid request payload", details: err.errors });
+    res.status(400).json({ error: "Invalid request payload", details: (err as ZodError).issues });
     return true;
   }
   return false;
@@ -304,6 +313,16 @@ app.get("/api/agents", async (_req, res) => {
 app.post("/api/agents/register", async (req, res) => {
   try {
     const parsed = registerAgentSchema.parse(req.body);
+    if (parsed.wallet === "freighter") {
+      const op = identityContract.call(
+        "register",
+        new Address(parsed.publicKey!).toScVal(),
+        nativeToScVal(parsed.uri || "ipfs://dashboard-agent", { type: "string" }),
+      );
+      const txXdr = await buildTxXdr(parsed.publicKey!, op);
+      res.json({ xdr: txXdr });
+      return;
+    }
     const kp = getKeypair(parsed.wallet);
     const agentId = await identity.register(kp, parsed.uri || "ipfs://dashboard-agent");
     invalidateAgents();
@@ -332,7 +351,8 @@ app.get("/api/jobs", async (req, res) => {
 // POST /api/jobs/create
 app.post("/api/jobs/create", async (req, res) => {
   try {
-    const { wallet, provider, evaluator, budget, description } = req.body;
+    const parsed = createJobSchema.parse(req.body);
+    const { wallet, provider, evaluator, budget, description } = parsed;
     const kp = getKeypair(wallet);
     const providerAddr = provider || sellerKeypair.publicKey();
     const evaluatorAddr = evaluator || kp.publicKey();
@@ -350,7 +370,7 @@ app.post("/api/jobs/create", async (req, res) => {
       evaluatorAddr,
       cfg.usdcToken,
       budgetBn,
-      parsed.description || "Dashboard test job",
+      description || "Dashboard test job",
     );
     invalidateJobs();
     res.json({ jobId: jobId.toString() });
@@ -439,9 +459,6 @@ app.put("/api/jobs/:id", async (req, res) => {
 
 // --- Freighter wallet endpoints: build unsigned XDR ---
 
-const identityContract = new Contract(cfg.identityContract);
-const commerceContract = new Contract(cfg.commerceContract);
-
 /** Build an unsigned, simulated transaction and return its XDR */
 async function buildTxXdr(publicKey: string, op: xdr.Operation): Promise<string> {
   const account = await server.getAccount(publicKey);
@@ -476,7 +493,8 @@ app.post("/api/build/register", async (req, res) => {
 // POST /api/build/createJob — build unsigned create_job tx
 app.post("/api/build/createJob", async (req, res) => {
   try {
-    const { publicKey, provider, evaluator, budget, description } = req.body;
+    const parsed = buildCreateJobSchema.parse(req.body);
+    const { publicKey, provider, evaluator, budget, description } = parsed;
     const providerAddr = provider || sellerKeypair.publicKey();
     const evaluatorAddr = evaluator || publicKey;
     const budgetBn = BigInt(budget || 10_000_000);
@@ -489,14 +507,14 @@ app.post("/api/build/createJob", async (req, res) => {
 
     const op = commerceContract.call(
       "create_job",
-      new Address(parsed.publicKey).toScVal(),
+      new Address(publicKey).toScVal(),
       new Address(providerAddr).toScVal(),
       new Address(evaluatorAddr).toScVal(),
       new Address(cfg.usdcToken).toScVal(),
       nativeToScVal(budgetBn, { type: "i128" }),
-      nativeToScVal(parsed.description || "Dashboard test job", { type: "string" }),
+      nativeToScVal(description || "Dashboard test job", { type: "string" }),
     );
-    const txXdr = await buildTxXdr(parsed.publicKey, op);
+    const txXdr = await buildTxXdr(publicKey, op);
     res.json({ xdr: txXdr });
   } catch (err: unknown) {
     if (respondWithValidationError(err, res)) return;
@@ -616,7 +634,7 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
     return res.status(400).json({ error: "Malformed JSON payload" });
   }
   if (err instanceof ZodError) {
-    return res.status(400).json({ error: "Invalid request payload", details: err.errors });
+    return res.status(400).json({ error: "Invalid request payload", details: (err as ZodError).issues });
   }
   console.error("Unhandled server error:", err);
   res.status(500).json({ error: "Internal server error" });

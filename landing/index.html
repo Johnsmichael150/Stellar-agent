@@ -6,6 +6,11 @@
   <title>Bear on Stellar — The Commerce Layer for Agent Payments</title>
   <meta name="description" content="The commerce layer for AI agent payments on Stellar. Job escrow with delivery guarantees, on-chain agent identity, on top of x402 and MPP.">
 
+  <!-- Dashboard base URL. Defaults to same-origin "/app" (served by dashboard/server.ts
+       alongside this landing page). Override this content value when the landing page
+       and dashboard are deployed to separate origins. -->
+  <meta name="marc-dashboard-url" content="/app">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -35,7 +40,7 @@
         <a href="https://developers.stellar.org/docs/build" target="_blank" rel="noopener" class="icon-btn" aria-label="Docs">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         </a>
-        <a href="https://stellarchaos.github.io/stellarchaos-lite/dashboard/app" target="_blank" rel="noopener" class="btn btn-primary" data-umami-event="cta-launch-app" data-umami-event-location="nav">Launch App</a>
+        <a href="/app" data-dashboard-link target="_blank" rel="noopener" class="btn btn-primary" data-umami-event="cta-launch-app" data-umami-event-location="nav">Launch App</a>
       </div>
     </div>
   </nav>
@@ -69,7 +74,7 @@
         </h1>
         <p class="hero-subtitle fade-up" style="--delay:0.4s">The commerce layer for AI agent payments on Stellar. Job escrow with delivery guarantees, on-chain agent identity, on top of x402 and MPP. All in one protocol.</p>
         <div class="hero-ctas fade-up" style="--delay:0.55s">
-          <a href="https://stellarchaos.github.io/stellarchaos-lite/dashboard/app" target="_blank" rel="noopener" class="btn btn-primary" data-umami-event="cta-launch-app" data-umami-event-location="hero">Launch Dashboard</a>
+          <a href="/app" data-dashboard-link target="_blank" rel="noopener" class="btn btn-primary" data-umami-event="cta-launch-app" data-umami-event-location="hero">Launch Dashboard</a>
           <a href="https://github.com/sonoflawal-1/Stellar-agent" target="_blank" rel="noopener" class="btn btn-secondary" data-umami-event="cta-github" data-umami-event-location="hero">View on GitHub</a>
         </div>
       </div>

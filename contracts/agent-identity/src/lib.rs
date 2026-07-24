@@ -1,6 +1,8 @@
 #![no_std]
 use soroban_sdk::{contract, contractevent, contractimpl, contracttype, contracterror, Address, Env, String};
 
+const MAX_METADATA_URI_LEN: u32 = 256;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -80,6 +82,9 @@ impl AgentIdentityContract {
         if uri.len() == 0 {
             panic!("metadata_uri cannot be empty");
         }
+        if uri.len() > MAX_METADATA_URI_LEN {
+            panic!("metadata_uri too long");
+        }
 
         if env
             .storage()
@@ -129,6 +134,12 @@ impl AgentIdentityContract {
     /// Update the metadata URI of an agent. Caller must be the current owner.
     pub fn update_uri(env: Env, caller: Address, id: u64, new_uri: String) {
         caller.require_auth();
+        if new_uri.len() == 0 {
+            panic!("metadata_uri cannot be empty");
+        }
+        if new_uri.len() > MAX_METADATA_URI_LEN {
+            panic!("metadata_uri too long");
+        }
         let mut agent: Agent = env
             .storage()
             .persistent()

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "tsx --watch tui.ts",
     "seller": "tsx seller-agent.ts",
     "buyer": "tsx buyer-agent.ts",
     "lifecycle": "tsx lifecycle.ts",

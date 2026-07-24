@@ -3,6 +3,20 @@
 
 document.addEventListener("DOMContentLoaded", () => {
 
+  // ── Dashboard link base URL ──
+  // Reads the configurable base path from the <meta name="marc-dashboard-url">
+  // tag so this same markup works whether the dashboard is served from this
+  // same origin (default "/app") or deployed separately (override the meta
+  // tag's content with an absolute URL).
+  const dashboardUrl = document
+    .querySelector('meta[name="marc-dashboard-url"]')
+    ?.content?.trim();
+  if (dashboardUrl) {
+    document.querySelectorAll("[data-dashboard-link]").forEach((link) => {
+      link.href = dashboardUrl;
+    });
+  }
+
   // ── Scroll reveal observer (fade-in elements) ──
   const revealObserver = new IntersectionObserver(
     (entries) => {

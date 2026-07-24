@@ -41,18 +41,38 @@ function log(msg: string) {
 function waitForOutput(proc: ChildProcess, pattern: string, timeoutMs = 90_000): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timeout waiting for "${pattern}"`)), timeoutMs);
-    const onData = (chunk: Buffer) => {
+    const onStdout = (chunk: Buffer) => {
       const text = chunk.toString();
       process.stdout.write(text);
-      if (text.includes(pattern)) {
-        clearTimeout(timer);
-        proc.stdout?.off("data", onData);
-        resolve();
-      }
+      if (text.includes(pattern)) finish();
     };
-    proc.stdout?.on("data", onData);
-    proc.stderr?.on("data", (c: Buffer) => process.stderr.write(c));
+    const onStderr = (chunk: Buffer) => {
+      const text = chunk.toString();
+      process.stderr.write(text);
+      if (text.includes(pattern)) finish();
+    };
+    const finish = () => {
+      clearTimeout(timer);
+      proc.stdout?.off("data", onStdout);
+      proc.stderr?.off("data", onStderr);
+      resolve();
+    };
+    proc.stdout?.on("data", onStdout);
+    proc.stderr?.on("data", onStderr);
   });
+}
+
+async function waitForHttpReady(url: string, timeoutMs = 30_000, intervalMs = 200): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await fetch(url);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+  throw new Error(`Timed out waiting for ${url} to become ready`);
 }
 
 async function main() {
@@ -77,8 +97,9 @@ async function main() {
   await waitForOutput(seller, "listening on");
   log("seller is up");
 
-  // Give server a moment to fully bind.
-  await new Promise((r) => setTimeout(r, 2000));
+  // Confirm the HTTP server has actually finished binding before proceeding.
+  const sellerPort = Number(process.env.SELLER_PORT ?? 4402);
+  await waitForHttpReady(`http://localhost:${sellerPort}/api/work`);
 
   await pause("seller is ready — about to run buyer-agent");
   log("running buyer-agent...");

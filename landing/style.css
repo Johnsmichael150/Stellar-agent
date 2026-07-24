@@ -675,3 +675,13 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   .nav-actions .btn { display: none; }
   .nav-actions .icon-btn { display: none; }
 }
+
+/* ── Small phones ── */
+@media (max-width: 480px) {
+  .container { padding: 0 16px; }
+  .nav-inner { padding: 0 16px; }
+  .hero-ctas { flex-direction: column; align-items: stretch; }
+  .hero-ctas .btn { justify-content: center; text-align: center; }
+  .contract-card { padding: 20px; }
+  .contract-addr { padding: 10px 12px; }
+}

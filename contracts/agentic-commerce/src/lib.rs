@@ -38,6 +38,7 @@ enum DataKey {
     Treasury,
     Admin,
     FeeBps,
+    Version,
 }
 
 const DEFAULT_FEE_BPS: u32 = 100; // 1%
@@ -128,6 +129,7 @@ impl AgenticCommerceContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
+        env.storage().instance().set(&DataKey::Version, &1u32);
     }
 
     /// Create a job and escrow `budget` from the `client_addr` into the contract.
@@ -161,6 +163,9 @@ impl AgenticCommerceContract {
         }
         if budget <= 0 {
             panic!("budget must be positive");
+        }
+        if provider == evaluator {
+            panic!("provider cannot be evaluator");
         }
 
         let next: u64 = env
@@ -243,8 +248,17 @@ impl AgenticCommerceContract {
             panic!("invalid status");
         }
         let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap();
-        let fee: i128 = (job.budget * (fee_bps as i128)) / BPS_DENOM;
+        let fee: i128 = job
+            .budget
+            .checked_mul(fee_bps as i128)
+            .expect("fee overflow")
+            .checked_div(BPS_DENOM)
+            .expect("fee overflow");
         let payout: i128 = job.budget - fee;
+
+        job.status = JobStatus::Completed;
+        job.updated_at = env.ledger().timestamp();
+        env.storage().persistent().set(&DataKey::Job(id), &job);
 
         let token_client = token::TokenClient::new(&env, &job.token);
         let contract_addr = env.current_contract_address();
@@ -253,10 +267,6 @@ impl AgenticCommerceContract {
             let treasury: Address = env.storage().instance().get(&DataKey::Treasury).unwrap();
             token_client.transfer(&contract_addr, &treasury, &fee);
         }
-
-        job.status = JobStatus::Completed;
-        job.updated_at = env.ledger().timestamp();
-        env.storage().persistent().set(&DataKey::Job(id), &job);
 
         JobCompleted {
             evaluator: caller,
@@ -332,7 +342,11 @@ impl AgenticCommerceContract {
     /// Intended for frontends that want to display the estimated fee before
     /// calling `create_job`.
     pub fn simulate_job_fee(_env: Env, budget: i128, fee_bps: u32) -> i128 {
-        (budget * (fee_bps as i128)) / BPS_DENOM
+        budget
+            .checked_mul(fee_bps as i128)
+            .unwrap_or(0)
+            .checked_div(BPS_DENOM)
+            .unwrap_or(0)
     }
 
     /// Fetch a job by id.
@@ -341,8 +355,8 @@ impl AgenticCommerceContract {
     }
 
     /// Contract version. Bump on ABI changes.
-    pub fn version(_env: Env) -> u32 {
-        1
+    pub fn version(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::Version).unwrap_or(1u32)
     }
 
     /// Total number of jobs ever created (for dashboard stats).

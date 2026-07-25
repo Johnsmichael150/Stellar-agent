@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 // Shared types for the marc-stellar SDK.
 //
 // These mirror the on-chain structures of the two Soroban contracts
@@ -147,33 +150,92 @@ export interface MarcConfig {
   onTx?: (hash: string, method: string) => void;
 }
 
+interface PresetConfig {
+  network: "stellar-testnet" | "stellar-mainnet";
+  networkPassphrase: string;
+  rpcUrl: string;
+  identityContract: Address;
+  commerceContract: Address;
+  deployer?: Address;
+  usdcToken: Address;
+}
+
+function getEnvValue(name: string) {
+  if (typeof process === "undefined") return undefined;
+  return process.env[name];
+}
+
+function resolveDeploymentValues(network: "testnet" | "mainnet") {
+  const envIdentity = getEnvValue(network === "testnet" ? "MARC_TESTNET_IDENTITY_CONTRACT" : "MARC_MAINNET_IDENTITY_CONTRACT");
+  const envCommerce = getEnvValue(network === "testnet" ? "MARC_TESTNET_COMMERCE_CONTRACT" : "MARC_MAINNET_COMMERCE_CONTRACT");
+  const envUsdc = getEnvValue(network === "testnet" ? "MARC_TESTNET_USDC_TOKEN" : "MARC_MAINNET_USDC_TOKEN");
+
+  if (envIdentity || envCommerce || envUsdc) {
+    return {
+      identityContract: (envIdentity || "") as Address,
+      commerceContract: (envCommerce || "") as Address,
+      usdcToken: (envUsdc || "") as Address,
+    };
+  }
+
+  try {
+    const deploymentPath = fileURLToPath(new URL(`../../deployments/${network}.json`, import.meta.url));
+    const deploymentConfig = JSON.parse(readFileSync(deploymentPath, "utf8"));
+    return {
+      identityContract: (deploymentConfig.agent_identity || deploymentConfig.identityContract || "") as Address,
+      commerceContract: (deploymentConfig.agentic_commerce || deploymentConfig.commerceContract || "") as Address,
+      usdcToken: (deploymentConfig.usdcToken || "") as Address,
+    };
+  } catch {
+    if (network === "testnet") {
+      return {
+        identityContract: "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5" as Address,
+        commerceContract: "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE" as Address,
+        usdcToken: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA" as Address,
+      };
+    }
+
+    return {
+      identityContract: "" as Address,
+      commerceContract: "" as Address,
+      usdcToken: "" as Address,
+    };
+  }
+}
+
+function getEnvRpcUrl(defaultRpcUrl: string) {
+  return (typeof process !== "undefined" && process.env["STELLAR_RPC_URL"])
+    ? process.env["STELLAR_RPC_URL"]
+    : defaultRpcUrl;
+}
+
 /**
  * Preset configuration for Stellar testnet.
  *
- * Contains hard-coded contract addresses and network settings for testnet.
- * Values are updated each time contracts are deployed via `scripts/deploy-testnet.sh`.
- * Use as a base and override fields for custom RPC URLs or other adjustments.
- *
- * @example
- * ```typescript
- * const cfg = { ...TESTNET, rpcUrl: "http://localhost:8000" };
- * ```
+ * Defaults to the latest deployed testnet addresses when available, while still
+ * allowing environment overrides for custom RPC endpoints or deployment paths.
  */
-export const TESTNET = {
-  network: "stellar-testnet" as const,
+export const TESTNET: PresetConfig = {
+  network: "stellar-testnet",
   networkPassphrase: "Test SDF Network ; September 2015",
-  rpcUrl: (typeof process !== "undefined" && process.env["STELLAR_RPC_URL"])
-    ? process.env["STELLAR_RPC_URL"]
-    : "https://soroban-testnet.stellar.org",
-  identityContract:
-    "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5" as Address,
-  commerceContract:
-    "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE" as Address,
-  deployer:
-    "GA5VIZYCUM3IUZZNQTTB7YSLJSE5WZ2EI5EGWNLTWQ234SLSH45MPKX3" as Address,
-  usdcToken:
-    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA" as Address,
-} as const;
+  rpcUrl: getEnvRpcUrl("https://soroban-testnet.stellar.org"),
+  ...resolveDeploymentValues("testnet"),
+  deployer: "GA5VIZYCUM3IUZZNQTTB7YSLJSE5WZ2EI5EGWNLTWQ234SLSH45MPKX3" as Address,
+};
+
+/**
+ * Preset configuration for Stellar mainnet.
+ */
+export const MAINNET: PresetConfig = {
+  network: "stellar-mainnet",
+  networkPassphrase: "Public Global Stellar Network ; September 2015",
+  rpcUrl: getEnvRpcUrl("https://soroban-rpc.mainnet.stellar.org"),
+  ...resolveDeploymentValues("mainnet"),
+};
+
+export function loadConfig(network: "testnet" | "mainnet"): PresetConfig {
+  return network === "mainnet" ? MAINNET : TESTNET;
+}
 
 /**
  * Symbol topic names emitted by the `agentic_commerce` contract events.

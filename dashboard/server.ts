@@ -259,6 +259,9 @@ function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction)
 function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === "bigint") return obj.toString();
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj instanceof Map) return Array.from(obj.entries()).map(([k, v]) => [serialize(k), serialize(v)]);
+  if (obj instanceof Set) return Array.from(obj).map(serialize);
   if (Array.isArray(obj)) return obj.map(serialize);
   if (typeof obj === "object") {
     const result: Record<string, unknown> = {};

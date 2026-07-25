@@ -2,7 +2,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import path from "path";
 import { fileURLToPath } from "url";
 import { z, ZodError } from "zod";
-import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey } from "@stellar/stellar-sdk";
+import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey, Networks } from "@stellar/stellar-sdk";
 import { cfg, buyerKeypair, sellerKeypair, getKeypair, DEMO_MODE } from "./lib/config.js";
 import {
   getAllAgents,
@@ -271,11 +271,16 @@ function serialize(obj: unknown): unknown {
   return obj;
 }
 
+const HORIZON_URL =
+  process.env.HORIZON_URL ??
+  (cfg.networkPassphrase === Networks.PUBLIC
+    ? "https://horizon.stellar.org"
+    : "https://horizon-testnet.stellar.org");
+
 /** Get XLM balance from Horizon */
 async function getXlmBalance(pubkey: string): Promise<string> {
   try {
-    const horizonUrl = "https://horizon-testnet.stellar.org";
-    const resp = await fetch(`${horizonUrl}/accounts/${pubkey}`);
+    const resp = await fetch(`${HORIZON_URL}/accounts/${pubkey}`);
     if (!resp.ok) return "0";
     const data = await resp.json() as { balances: Array<{ asset_type: string; balance: string }> };
     const native = data.balances.find((b: { asset_type: string }) => b.asset_type === "native");

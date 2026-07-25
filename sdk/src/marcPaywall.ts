@@ -123,15 +123,36 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
         return originalSetHeader.call(this, name, value);
       };
 
-      paywall(req, res, (paywallErr?: unknown) => {
-        if (paywallErr) return next(paywallErr);
+      try {
+        paywall(req, res, (paywallErr?: unknown) => {
+          if (paywallErr) {
+            // Malformed payment headers or verification errors should return generic 402
+            // to avoid leaking internal details like facilitator URLs
+            if (!res.headersSent) {
+              res.status(402).setHeader("Content-Type", "application/json");
+              res.setHeader("Access-Control-Expose-Headers", "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS");
+              res.setHeader("PAYMENT-REQUIRED", JSON.stringify(routeConfig["*"]));
+              return res.end(JSON.stringify({ error: "Payment required" }));
+            }
+            return next(paywallErr);
+          }
 
-        const paymentResp = res.getHeader("PAYMENT-RESPONSE") ?? res.getHeader("payment-response");
-        if (paymentResp && !res.getHeader("X-PAYMENT-RESPONSE")) {
-          res.setHeader("X-PAYMENT-RESPONSE", paymentResp as string);
+          const paymentResp = res.getHeader("PAYMENT-RESPONSE") ?? res.getHeader("payment-response");
+          if (paymentResp && !res.getHeader("X-PAYMENT-RESPONSE")) {
+            res.setHeader("X-PAYMENT-RESPONSE", paymentResp as string);
+          }
+          next();
+        });
+      } catch (err) {
+        // Catch synchronous errors from paymentMiddleware (e.g., header parsing errors)
+        if (!res.headersSent) {
+          res.status(402).setHeader("Content-Type", "application/json");
+          res.setHeader("Access-Control-Expose-Headers", "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS");
+          res.setHeader("PAYMENT-REQUIRED", JSON.stringify(routeConfig["*"]));
+          return res.end(JSON.stringify({ error: "Payment required" }));
         }
-        next();
-      });
+        next(err);
+      }
     });
   };
 }

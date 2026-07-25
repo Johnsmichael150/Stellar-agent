@@ -104,7 +104,7 @@ function mergeHeaders(
 }
 
 /**
- * Create a fetch wrapper that automatically handles HTTP 402 payment responses.
+ * Reusable x402 fetch client with connection pooling.
  *
  * Wraps the native `fetch` function to intercept 402 "Payment Required" responses.
  * When a 402 is received, the wrapper automatically:
@@ -115,52 +115,59 @@ function mergeHeaders(
  *
  * Uses the x402 v2 protocol with @x402/fetch and @x402/stellar libraries.
  *
- * @param opts - Configuration including signer keypair, RPC URL, and network
- * @returns A fetch-compatible function that auto-pays on 402 responses
- *
  * @example
  * ```typescript
- * const fetch = marcFetch({
+ * const client = marcFetch({
  *   signer: myKeypair,
  *   network: "testnet",
  *   onPayment: (status) => console.log(`Payment: ${status}`),
  * });
- * const response = await fetch("https://api.example.com/protected");
+ * const response = await client.fetch("https://api.example.com/protected");
+ * await client.close();
  * ```
  */
-export function marcFetch(opts: MarcFetchOptions) {
-  const {
-    signer,
-    rpcUrl,
-    network = "testnet",
-    headers: customHeaders,
-    onPayment,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    maxPaymentAttempts = DEFAULT_MAX_PAYMENT_ATTEMPTS,
-    fetchImpl = fetch,
-  } = opts;
+export class MarcFetchClient {
+  private client: x402Client;
+  private httpClient: x402HTTPClient;
+  private fetchWithTimeout: ReturnType<typeof withTimeout>;
+  private paymentAttemptCache: Map<string, number>;
 
-  const caip2 =
-    network === "pubnet" ? STELLAR_PUBNET_CAIP2 : STELLAR_TESTNET_CAIP2;
+  constructor(private opts: MarcFetchOptions) {
+    const {
+      signer,
+      rpcUrl,
+      network = "testnet",
+      timeoutMs = DEFAULT_TIMEOUT_MS,
+      fetchImpl = fetch,
+    } = opts;
 
-  const stellarSigner = createEd25519Signer(signer.secret(), caip2);
+    const caip2 =
+      network === "pubnet" ? STELLAR_PUBNET_CAIP2 : STELLAR_TESTNET_CAIP2;
 
-  const rpcConfig = rpcUrl ? { url: rpcUrl } : undefined;
-  const stellarScheme = new ExactStellarScheme(stellarSigner, rpcConfig);
+    const stellarSigner = createEd25519Signer(signer.secret(), caip2);
 
-  const client = new x402Client();
-  client.register(caip2, stellarScheme);
-  const httpClient = new x402HTTPClient(client);
-  const fetchWithTimeout = withTimeout(fetchImpl, timeoutMs);
-  const paymentAttemptCache = new Map<string, number>();
+    const rpcConfig = rpcUrl ? { url: rpcUrl } : undefined;
+    const stellarScheme = new ExactStellarScheme(stellarSigner, rpcConfig);
 
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    this.client = new x402Client();
+    this.client.register(caip2, stellarScheme);
+    this.httpClient = new x402HTTPClient(this.client);
+    this.fetchWithTimeout = withTimeout(fetchImpl, timeoutMs);
+    this.paymentAttemptCache = new Map<string, number>();
+  }
+
+  /**
+   * Perform a fetch request with automatic 402 payment handling.
+   */
+  async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const { headers: customHeaders, onPayment, maxPaymentAttempts = DEFAULT_MAX_PAYMENT_ATTEMPTS } = this.opts;
+
     const request = new Request(input, {
       ...init,
       headers: mergeHeaders(customHeaders, init?.headers),
     });
 
-    let response = await fetchWithTimeout(request.clone());
+    let response = await this.fetchWithTimeout(request.clone());
     if (response.status !== 402) {
       return response;
     }
@@ -174,28 +181,28 @@ export function marcFetch(opts: MarcFetchOptions) {
       const parsed = parsePaymentRequiredHeader(requiredHeader);
       const url = new URL(request.url).toString();
       const cacheKey = `${url}|${parsed.asset ?? "unknown-asset"}|${parsed.amount ?? "unknown-amount"}`;
-      const attempts = paymentAttemptCache.get(cacheKey) ?? 0;
+      const attempts = this.paymentAttemptCache.get(cacheKey) ?? 0;
       if (attempts >= maxPaymentAttempts) {
         throw new Error(`max payment attempts reached for ${url}`);
       }
-      paymentAttemptCache.set(cacheKey, attempts + 1);
+      this.paymentAttemptCache.set(cacheKey, attempts + 1);
 
-      const paymentRequired = httpClient.getPaymentRequiredResponse((name) => response.headers.get(name));
+      const paymentRequired = this.httpClient.getPaymentRequiredResponse((name) => response.headers.get(name));
 
       try {
         onPayment?.("signing");
-        const payload = await client.createPaymentPayload(paymentRequired);
+        const payload = await this.client.createPaymentPayload(paymentRequired);
         onPayment?.("pending");
 
-        const paymentHeaders = httpClient.encodePaymentSignatureHeader(payload);
+        const paymentHeaders = this.httpClient.encodePaymentSignatureHeader(payload);
         const paidRequest = new Request(input, {
           ...init,
           headers: mergeHeaders(customHeaders, init?.headers, paymentHeaders),
         });
         paidRequest.headers.set("Access-Control-Expose-Headers", "PAYMENT-RESPONSE,X-PAYMENT-RESPONSE");
 
-        response = await fetchWithTimeout(paidRequest);
-        await httpClient.processPaymentResult(
+        response = await this.fetchWithTimeout(paidRequest);
+        await this.httpClient.processPaymentResult(
           payload,
           (name) => response.headers.get(name),
           response.status,
@@ -203,7 +210,7 @@ export function marcFetch(opts: MarcFetchOptions) {
 
         if (response.status !== 402) {
           onPayment?.("settled");
-          paymentAttemptCache.delete(cacheKey);
+          this.paymentAttemptCache.delete(cacheKey);
           return response;
         }
       } catch (err) {
@@ -213,5 +220,34 @@ export function marcFetch(opts: MarcFetchOptions) {
     }
 
     return response;
-  };
+  }
+
+  /**
+   * Clean up resources.
+   * Call this when the client is no longer needed.
+   */
+  close(): void {
+    this.paymentAttemptCache.clear();
+  }
+}
+
+/**
+ * Create a fetch wrapper that automatically handles HTTP 402 payment responses.
+ *
+ * @param opts - Configuration including signer keypair, RPC URL, and network
+ * @returns A MarcFetchClient with fetch() and close() methods
+ *
+ * @example
+ * ```typescript
+ * const client = marcFetch({
+ *   signer: myKeypair,
+ *   network: "testnet",
+ *   onPayment: (status) => console.log(`Payment: ${status}`),
+ * });
+ * const response = await client.fetch("https://api.example.com/protected");
+ * await client.close();
+ * ```
+ */
+export function marcFetch(opts: MarcFetchOptions): MarcFetchClient {
+  return new MarcFetchClient(opts);
 }

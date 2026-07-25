@@ -1,17 +1,17 @@
 import {
   Contract,
   Keypair,
-  rpc,
   TransactionBuilder,
   nativeToScVal,
   scValToNative,
   BASE_FEE,
   Address,
   xdr,
-  Account,
   StrKey,
+  rpc,
 } from "@stellar/stellar-sdk";
 import type { Agent, MarcConfig } from "./types.js";
+import { BaseClient } from "./baseClient.js";
 
 /**
  * Typed wrapper around the `agent_identity` Soroban contract.
@@ -28,8 +28,7 @@ import type { Agent, MarcConfig } from "./types.js";
  * await client.disconnect();
  * ```
  */
-export class IdentityClient {
-  private server: rpc.Server;
+export class IdentityClient extends BaseClient {
   private contract: Contract;
 
   /**
@@ -37,11 +36,8 @@ export class IdentityClient {
    *
    * @param cfg - Configuration containing RPC URL, network passphrase, contract address, etc.
    */
-  constructor(private cfg: MarcConfig) {
-    this.server = new rpc.Server(cfg.rpcUrl, {
-      allowHttp: cfg.rpcUrl.startsWith("http://"),
-      timeout: 15000,
-    });
+  constructor(cfg: MarcConfig) {
+    super(cfg);
     this.contract = new Contract(cfg.identityContract);
   }
 
@@ -76,7 +72,7 @@ export class IdentityClient {
       new Address(owner.publicKey()).toScVal(),
       nativeToScVal(uri, { type: "string" }),
     );
-    return await this.invoke(owner, op, (v) => BigInt(scValToNative(v) as string));
+    return await this.invoke(owner, op, (v) => BigInt(scValToNative(v) as string), "identity");
   }
 
   /**
@@ -132,20 +128,20 @@ export class IdentityClient {
       nativeToScVal(id, { type: "u64" }),
       nativeToScVal(uri, { type: "string" }),
     );
-    await this.invoke(owner, op, () => undefined);
+    await this.invoke(owner, op, () => undefined, "identity");
   }
 
   /**
-   * List all registered agents by scanning sequential IDs until a gap.
+   * List all registered agents by scanning sequential IDs up to maxId.
    *
-   * @param maxId - Maximum ID to scan (default 200). Stops at first gap.
+   * @param maxId - Maximum ID to scan (default 200). Continues past gaps.
    * @returns Array of all registered agents with IDs from 1 to maxId
    */
   async listAgents(maxId = 200n): Promise<Agent[]> {
     const agents: Agent[] = [];
     for (let id = 1n; id <= maxId; id++) {
       const agent = await this.getAgent(id);
-      if (!agent) break;
+      if (!agent) continue;
       agents.push(agent);
     }
     return agents;
@@ -165,7 +161,7 @@ export class IdentityClient {
       nativeToScVal(id, { type: "u64" }),
       new Address(newOwner.publicKey()).toScVal(),
     );
-    await this.invokeMultiSig(owner, newOwner, op);
+    await this.invokeMultiSig(owner, newOwner, op, "identity");
   }
 
   /**
@@ -180,17 +176,9 @@ export class IdentityClient {
       new Address(owner.publicKey()).toScVal(),
       nativeToScVal(id, { type: "u64" }),
     );
-    await this.invoke(owner, op, () => undefined);
+    await this.invoke(owner, op, () => undefined, "identity");
   }
 
-  /**
-   * Clean up resources (no-op for stateless HTTP clients).
-   * Call this when the client is no longer needed for symmetry with other clients.
-   * The RPC server uses stateless HTTP connections, so no cleanup is required.
-   */
-  disconnect(): void {
-    // No-op: RPC Server uses stateless HTTP, no long-lived connections to close
-  }
 
   /**
    * Get the balance of `address` for a given token.
@@ -212,7 +200,7 @@ export class IdentityClient {
   // --- internals ---
 
   /** Submit a transaction signed by two keypairs (old owner + new owner). */
-  private async invokeMultiSig(signer1: Keypair, signer2: Keypair, op: xdr.Operation): Promise<void> {
+  private async invokeMultiSig(signer1: Keypair, signer2: Keypair, op: xdr.Operation, txLabel: string): Promise<void> {
     const account = await this.server.getAccount(signer1.publicKey());
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
@@ -236,62 +224,6 @@ export class IdentityClient {
       const detail = failed.resultXdr?.result()?.switch()?.name ?? getResp.status;
       throw new Error(`tx failed: ${detail}`);
     }
-    this.cfg.onTx?.(sent.hash, "identity");
-  }
-
-  private async invoke<T>(
-    signer: Keypair,
-    op: xdr.Operation,
-    decode: (scVal: xdr.ScVal) => T,
-  ): Promise<T> {
-    const account = await this.server.getAccount(signer.publicKey());
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: this.cfg.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
-    const prepared = await this.server.prepareTransaction(tx);
-    prepared.sign(signer);
-    const sent = await this.server.sendTransaction(prepared);
-    if (sent.status === "ERROR") throw new Error(`submit failed: ${sent.errorResult}`);
-    let getResp = await this.server.getTransaction(sent.hash);
-    while (getResp.status === "NOT_FOUND") {
-      await new Promise((r) => setTimeout(r, 1000));
-      getResp = await this.server.getTransaction(sent.hash);
-    }
-    if (getResp.status !== "SUCCESS") {
-      const failed = getResp as rpc.Api.GetFailedTransactionResponse;
-      const detail = failed.resultXdr?.result()?.switch()?.name ?? getResp.status;
-      throw new Error(`tx failed: ${detail}`);
-    }
-    this.cfg.onTx?.(sent.hash, "identity");
-    return decode(getResp.returnValue!);
-  }
-
-  private async simulate<T>(op: xdr.Operation, decode: (v: xdr.ScVal) => T): Promise<T> {
-    const ephemeral = Keypair.random();
-    const dummy = new Account(ephemeral.publicKey(), "0");
-    const tx = new TransactionBuilder(dummy, {
-      fee: BASE_FEE,
-      networkPassphrase: this.cfg.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const sim = await this.server.simulateTransaction(tx);
-        if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
-        const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
-        if (!result) throw new Error("no simulation result");
-        return decode(result.retval);
-      } catch (err) {
-        if (attempt === 3) throw err;
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
-      }
-    }
-    throw new Error("unreachable");
+    this.cfg.onTx?.(sent.hash, txLabel);
   }
 }

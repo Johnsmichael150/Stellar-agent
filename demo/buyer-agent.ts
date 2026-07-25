@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { Keypair } from "@stellar/stellar-sdk";
-import { IdentityClient, CommerceClient, marcFetch, JobStatus, TESTNET, type MarcConfig } from "marc-stellar-sdk";
+import { IdentityClient, CommerceClient, marcFetch, TESTNET, type MarcConfig, JobStatus } from "marc-stellar-sdk";
 
 const cfg: MarcConfig = {
   rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,

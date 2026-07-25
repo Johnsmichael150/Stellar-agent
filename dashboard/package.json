@@ -12,6 +12,7 @@
     "@stellar/stellar-sdk": "^14.6.1",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
+    "helmet": "^8.3.0",
     "marc-stellar-sdk": "file:../sdk",
     "zod": "^4.4.0"
   },

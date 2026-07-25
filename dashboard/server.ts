@@ -290,6 +290,41 @@ async function getXlmBalance(pubkey: string): Promise<string> {
   }
 }
 
+/** Simulate a read-only contract call with no arguments and return its native value */
+async function simulateReadCall(contract: Contract, method: string): Promise<unknown> {
+  const op = contract.call(method);
+  const ephemeral = Keypair.random();
+  const dummy = new Account(ephemeral.publicKey(), "0");
+  const tx = new TransactionBuilder(dummy, {
+    fee: BASE_FEE,
+    networkPassphrase: cfg.networkPassphrase,
+  })
+    .addOperation(op)
+    .setTimeout(30)
+    .build();
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) return null;
+  const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
+  if (!result) return null;
+  return scValToNative(result.retval);
+}
+
+const tokenDecimalsCache = new Map<string, number>();
+
+/** Query and cache a SAC token's `decimals()` value, defaulting to 7 on failure */
+async function getTokenDecimals(tokenAddress: string): Promise<number> {
+  const cached = tokenDecimalsCache.get(tokenAddress);
+  if (cached !== undefined) return cached;
+  try {
+    const decimals = Number(await simulateReadCall(new Contract(tokenAddress), "decimals"));
+    if (!Number.isFinite(decimals)) return 7;
+    tokenDecimalsCache.set(tokenAddress, decimals);
+    return decimals;
+  } catch {
+    return 7;
+  }
+}
+
 /** Get MUSD (SAC) balance via Soroban simulate */
 async function getTokenBalance(pubkey: string): Promise<string> {
   try {
@@ -309,10 +344,12 @@ async function getTokenBalance(pubkey: string): Promise<string> {
     const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
     if (!result) return "0";
     const raw = scValToNative(result.retval);
-    // i128 comes back as bigint — format with 7 decimals
     const val = BigInt(raw);
-    const whole = val / 10_000_000n;
-    const frac = (val % 10_000_000n).toString().padStart(7, "0");
+    const decimals = await getTokenDecimals(cfg.usdcToken);
+    if (decimals === 0) return val.toString();
+    const divisor = 10n ** BigInt(decimals);
+    const whole = val / divisor;
+    const frac = (val % divisor).toString().padStart(decimals, "0");
     return `${whole}.${frac}`;
   } catch {
     return "0";

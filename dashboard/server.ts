@@ -1,4 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from "express";
+import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import { z, ZodError } from "zod";
@@ -26,6 +27,9 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// CSP is disabled: the dashboard loads the wallet-kit bundle from a CDN and
+// fonts from Google Fonts, which helmet's default script-src/style-src would block.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
 // Landing page at root

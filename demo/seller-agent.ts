@@ -68,7 +68,7 @@ app.listen(port, () => console.log(`[2] Paywall API listening on :${port}`));
 // Step 3: Submit deliverable once JOB_ID is set
 if (jobId) {
   const commerce = new CommerceClient(cfg);
-  await commerce.submit(seller, jobId, "ipfs://work-results.json");
+  await commerce.submit(seller, BigInt(jobId), "ipfs://work-results.json");
   console.log(`[3] Deliverable submitted for job ${jobId}`);
   console.log(`    Awaiting evaluator approval…\n`);
   console.log(`=== SELLER DONE ===\n`);

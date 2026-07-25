@@ -1,3 +1,63 @@
+import fs from "node:fs";
+import express from "express";
+import { Keypair } from "@stellar/stellar-sdk";
+import { IdentityClient, TESTNET, type MarcConfig } from "marc-stellar-sdk";
+
+export async function createSellerAgent(options: {
+  id: string;
+  port: number;
+  agentDir: string;
+}): Promise<{ app: express.Express; seller: Keypair; agentId: bigint; cfg: MarcConfig }> {
+  const cfg: MarcConfig = {
+    rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,
+    networkPassphrase: process.env.STELLAR_NETWORK_PASSPHRASE ?? TESTNET.networkPassphrase,
+    identityContract: process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
+    commerceContract: process.env.AGENTIC_COMMERCE_CONTRACT || TESTNET.commerceContract,
+    usdcToken: process.env.USDC_TOKEN_CONTRACT || TESTNET.usdcToken,
+    onTx: (hash) => console.log(`[tx] ${hash} → https://stellar.expert/explorer/testnet/tx/${hash}`),
+  };
+
+  const seller = Keypair.fromSecret(process.env.SELLER_SECRET!);
+  const identity = new IdentityClient(cfg);
+  let agentId: bigint | null = null;
+  try {
+    await retryWithBackoff(
+      async () => { agentId = await identity.agentOf(seller.publicKey()); },
+      { maxAttempts: 6, baseDelayMs: 2000, label: options.id },
+    );
+  } catch (err) {
+    console.error(`[${options.id}] Fatal: identity RPC unreachable —`, (err as Error).message);
+    process.exit(1);
+  }
+  if (!agentId) {
+    await retryWithBackoff(
+      async () => { agentId = await identity.register(seller, `ipfs://${options.id}.json`); },
+      { maxAttempts: 4, baseDelayMs: 2000, label: options.id },
+    );
+    console.log(`[${options.id}] Registered as agent #${agentId}`);
+  } else {
+    console.log(`[${options.id}] Already agent #${agentId}`);
+  }
+
+  const registryUrl = (process.env.REGISTRY_URL ?? "http://localhost:4500").replace(/\/+$/, "");
+  const registryApiKey = process.env.REGISTRY_API_KEY?.trim();
+  await startHeartbeat(options.id, registryUrl, { apiKey: registryApiKey, maxAttempts: 6, baseDelayMs: 2000 });
+
+  const app = express();
+  app.use(express.json());
+
+  app.use((req, res, next) => {
+    console.log(`[${options.id}] → ${req.method} ${req.path}`, JSON.stringify(req.body));
+    res.on("finish", () => console.log(`[${options.id}] ← ${res.statusCode}`));
+    next();
+  });
+
+  app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync(path.join(options.agentDir, "agent.json"), "utf8"))));
+  app.get("/health", (_req, res) => res.json({ status: "ok", agentId: options.id, uptime: process.uptime() }));
+
+  return { app, seller, agentId: agentId, cfg };
+}
+
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: { maxAttempts?: number; baseDelayMs?: number; label?: string },

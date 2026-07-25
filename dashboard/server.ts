@@ -39,6 +39,9 @@ const server = new rpc.Server(cfg.rpcUrl, {
   allowHttp: cfg.rpcUrl.startsWith("http://"),
 });
 
+const identityContract = new Contract(cfg.identityContract);
+const commerceContract = new Contract(cfg.commerceContract);
+
 const allowedOrigins = new Set(
   (process.env.DASHBOARD_ORIGINS ?? "http://localhost:3000,http://127.0.0.1:3000")
     .split(",")
@@ -67,8 +70,14 @@ const numericIdParamSchema = z.object({
 });
 
 const registerAgentSchema = z.object({
-  wallet: stellarAddressSchema,
+  wallet: z.enum(["buyer", "seller", "freighter"]),
+  publicKey: stellarAddressSchema.optional(),
   uri: z.string().min(1).optional(),
+}).refine(data => {
+  if (data.wallet === "freighter" && !data.publicKey) {
+    throw new Error("publicKey is required when wallet is freighter");
+  }
+  return true;
 });
 
 const createJobSchema = z.object({
@@ -418,6 +427,16 @@ app.get("/api/agents", async (_req, res) => {
 app.post("/api/agents/register", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = registerAgentSchema.parse(req.body);
+    if (parsed.wallet === "freighter") {
+      const op = identityContract.call(
+        "register",
+        new Address(parsed.publicKey!).toScVal(),
+        nativeToScVal(parsed.uri || "ipfs://dashboard-agent", { type: "string" }),
+      );
+      const txXdr = await buildTxXdr(parsed.publicKey!, op);
+      res.json({ xdr: txXdr });
+      return;
+    }
     const kp = getKeypair(parsed.wallet);
     const agentId = await identity.register(kp, parsed.uri || "ipfs://dashboard-agent");
     invalidateAgents();
@@ -445,7 +464,8 @@ app.get("/api/jobs", async (req, res) => {
 // POST /api/jobs/create
 app.post("/api/jobs/create", optionalAuthMiddleware, async (req, res) => {
   try {
-    const { wallet, provider, evaluator, budget, description } = req.body;
+    const parsed = createJobSchema.parse(req.body);
+    const { wallet, provider, evaluator, budget, description } = parsed;
     const kp = getKeypair(wallet);
     const providerAddr = provider || sellerKeypair.publicKey();
     const evaluatorAddr = evaluator || kp.publicKey();
@@ -548,9 +568,6 @@ app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
 });
 
 // --- Freighter wallet endpoints: build unsigned XDR ---
-
-const identityContract = new Contract(cfg.identityContract);
-const commerceContract = new Contract(cfg.commerceContract);
 
 const pendingTxHashes = new Set<string>();
 

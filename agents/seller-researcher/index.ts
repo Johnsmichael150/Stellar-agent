@@ -1,28 +1,20 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import express from "express";
+import { fileURLToPath } from "node:url";
 import rateLimit from "express-rate-limit";
 import Groq from "groq-sdk";
-import { Keypair } from "@stellar/stellar-sdk";
-import { IdentityClient, CommerceClient, TESTNET, type MarcConfig } from "marc-stellar-sdk";
-import { retryWithBackoff, startHeartbeat } from "../shared.js";
+import { CommerceClient } from "marc-stellar-sdk";
+import { retryWithBackoff, createSellerAgent } from "../shared.js";
 
-const cfg: MarcConfig = {
-  rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,
-  networkPassphrase: process.env.STELLAR_NETWORK_PASSPHRASE ?? TESTNET.networkPassphrase,
-  identityContract: process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
-  commerceContract: process.env.AGENTIC_COMMERCE_CONTRACT || TESTNET.commerceContract,
-  usdcToken: process.env.USDC_TOKEN_CONTRACT || TESTNET.usdcToken,
-  onTx: (hash) => console.log(`[tx] ${hash} → https://stellar.expert/explorer/testnet/tx/${hash}`),
-};
+const AGENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-const seller = Keypair.fromSecret(process.env.SELLER_SECRET!);
-const port = Number(process.env.SELLER_PORT ?? 4504);
+const PORT = Number(process.env.SELLER_PORT ?? 4504);
 const AGENT_ID = "seller-researcher";
-const registryUrl = (process.env.REGISTRY_URL ?? "http://localhost:4500").replace(/\/+$/, "");
-const registryApiKey = process.env.REGISTRY_API_KEY?.trim();
-const OUTPUT_FILE = "output/research.json";
+const OUTPUT_DIR = path.join(AGENT_DIR, "output");
+const OUTPUT_FILE = path.join(OUTPUT_DIR, "research.json");
+
+const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
@@ -65,29 +57,6 @@ Each source must have a real, verifiable URL. Include ${sourceRange} sources. ${
   return JSON.parse(text.replace(/```(?:json)?\s*/gi, "").trim()) as ResearchOutput;
 }
 
-const identity = new IdentityClient(cfg);
-let agentId: bigint | null = null;
-try {
-  await retryWithBackoff(
-    async () => { agentId = await identity.agentOf(seller.publicKey()); },
-    { maxAttempts: 6, baseDelayMs: 2000, label: AGENT_ID },
-  );
-} catch (err) {
-  console.error(`[${AGENT_ID}] Fatal: identity RPC unreachable —`, (err as Error).message);
-  process.exit(1);
-}
-if (!agentId) {
-  await retryWithBackoff(
-    async () => { agentId = await identity.register(seller, `ipfs://${AGENT_ID}.json`); },
-    { maxAttempts: 4, baseDelayMs: 2000, label: AGENT_ID },
-  );
-  console.log(`[${AGENT_ID}] Registered as agent #${agentId}`);
-} else {
-  console.log(`[${AGENT_ID}] Already agent #${agentId}`);
-}
-
-await startHeartbeat(AGENT_ID, registryUrl, { apiKey: registryApiKey, maxAttempts: 6, baseDelayMs: 2000 });
-
 const limiter = rateLimit({
   windowMs: 60_000,
   max: 5,
@@ -96,21 +65,16 @@ const limiter = rateLimit({
   message: { error: "too many requests — rate limited (5/min/IP)" },
 });
 
-const app = express();
-app.use(express.json());
-
-app.use((req, res, next) => {
-  console.log(`[${AGENT_ID}] → ${req.method} ${req.path}`, JSON.stringify(req.body));
-  res.on("finish", () => console.log(`[${AGENT_ID}] ← ${res.statusCode}`));
-  next();
-});
-
-app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync("agent.json", "utf8"))));
-
-app.get("/health", (_req, res) => res.json({ status: "ok", agentId: AGENT_ID, uptime: process.uptime() }));
-
 app.post("/job", limiter, async (req, res) => {
   const { jobId, task, depth } = req.body;
+  if (!jobId || isNaN(Number(jobId))) {
+    res.status(400).json({ error: "invalid jobId" });
+    return;
+  }
+  if (!task) {
+    res.status(400).json({ error: "missing task" });
+    return;
+  }
   const resolvedDepth: ResearchDepth = ["brief", "standard", "deep"].includes(depth) ? depth : "standard";
   console.log(`[${AGENT_ID}] Job #${jobId} (depth=${resolvedDepth}): ${task}`);
   res.json({ status: "accepted", jobId, depth: resolvedDepth });
@@ -119,7 +83,7 @@ app.post("/job", limiter, async (req, res) => {
     console.log(`[${AGENT_ID}] Calling Groq...`);
     const research = await generate(task, resolvedDepth);
     const sourceCount = research.sources.length;
-    fs.mkdirSync("output", { recursive: true });
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(research, null, 2));
     console.log(`[${AGENT_ID}] Research done: ${research.summary.length} chars, ${sourceCount} sources`);
 
@@ -134,4 +98,4 @@ app.post("/job", limiter, async (req, res) => {
   }
 });
 
-app.listen(port, () => console.log(`[${AGENT_ID}] Listening on :${port}`));
+app.listen(PORT, () => console.log(`[${AGENT_ID}] Listening on :${PORT}`));

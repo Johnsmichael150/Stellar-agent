@@ -28,6 +28,7 @@ enum DataKey {
     RegisteredCount,
     Agent(u64),
     OwnerToId(Address),
+    Version,
 }
 
 // --- Events ---
@@ -273,9 +274,9 @@ impl AgentIdentityContract {
             .unwrap_or(0u32)
     }
 
-    /// Contract version. Bump on ABI changes.
-    pub fn version(_env: Env) -> u32 {
-        1
+    /// Contract version. Bump on ABI changes. Read from instance storage.
+    pub fn version(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::Version).unwrap_or(1u32)
     }
 }
 

@@ -3,7 +3,7 @@ target/
 **/*.rs.bk
 Cargo.lock
 
-# Node
+# Node — root-level entry covers all packages, no per-package .gitignore needed
 node_modules/
 dist/
 *.tsbuildinfo

@@ -1,16 +1,13 @@
 import {
   Contract,
   Keypair,
-  rpc,
-  TransactionBuilder,
   nativeToScVal,
   scValToNative,
-  BASE_FEE,
   Address,
   xdr,
-  Account,
 } from "@stellar/stellar-sdk";
 import type { Job, JobStatus, MarcConfig } from "./types.js";
+import { BaseClient } from "./baseClient.js";
 
 // --- ScVal helpers (exported for custom contract interactions) ---
 
@@ -27,8 +24,7 @@ export const addrToScVal = (v: string) => new Address(v).toScVal();
  * Handles job lifecycle: create → submit → complete/cancel, plus
  * admin helpers (setTreasury, setFeeBps) and read-only queries.
  */
-export class CommerceClient {
-  private server: rpc.Server;
+export class CommerceClient extends BaseClient {
   private contract: Contract;
 
   constructor(private cfg: MarcConfig) {
@@ -64,7 +60,7 @@ export class CommerceClient {
       nativeToScVal(budget, { type: "i128" }),
       nativeToScVal(description, { type: "string" }),
     );
-    return await this.invoke(client, op, (v) => BigInt(scValToNative(v) as string));
+    return await this.invoke(client, op, (v) => BigInt(scValToNative(v) as string), "commerce");
   }
 
   /** Create a job and wait for the transaction to finalize. */
@@ -91,7 +87,7 @@ export class CommerceClient {
       nativeToScVal(jobId, { type: "u64" }),
       nativeToScVal(deliverable, { type: "string" }),
     );
-    await this.invoke(provider, op, () => undefined);
+    await this.invoke(provider, op, () => undefined, "commerce");
   }
 
   /** Evaluator marks a submitted job as completed (triggers 99/1 payout). */
@@ -101,7 +97,7 @@ export class CommerceClient {
       new Address(evaluator.publicKey()).toScVal(),
       nativeToScVal(jobId, { type: "u64" }),
     );
-    await this.invoke(evaluator, op, () => undefined);
+    await this.invoke(evaluator, op, () => undefined, "commerce");
   }
 
   /** Client cancels a funded job (full refund). */
@@ -111,7 +107,7 @@ export class CommerceClient {
       new Address(client.publicKey()).toScVal(),
       nativeToScVal(jobId, { type: "u64" }),
     );
-    await this.invoke(client, op, () => undefined);
+    await this.invoke(client, op, () => undefined, "commerce");
   }
 
   /** Read a job by ID. Returns null if not found. */
@@ -158,7 +154,7 @@ export class CommerceClient {
       new Address(admin.publicKey()).toScVal(),
       new Address(newTreasury).toScVal(),
     );
-    await this.invoke(admin, op, () => undefined);
+    await this.invoke(admin, op, () => undefined, "commerce");
   }
 
   /** Admin: update the fee (capped at 500 bps / 5%). */
@@ -168,7 +164,7 @@ export class CommerceClient {
       new Address(admin.publicKey()).toScVal(),
       nativeToScVal(newBps, { type: "u32" }),
     );
-    await this.invoke(admin, op, () => undefined);
+    await this.invoke(admin, op, () => undefined, "commerce");
   }
 
   /**
@@ -188,61 +184,4 @@ export class CommerceClient {
     return await this.simulate(op, (v) => BigInt(scValToNative(v) as string));
   }
 
-  // --- internals (same pattern as IdentityClient) ---
-
-  private async invoke<T>(
-    signer: Keypair,
-    op: xdr.Operation,
-    decode: (scVal: xdr.ScVal) => T,
-  ): Promise<T> {
-    const account = await this.server.getAccount(signer.publicKey());
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: this.cfg.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
-    const prepared = await this.server.prepareTransaction(tx);
-    prepared.sign(signer);
-    const sent = await this.server.sendTransaction(prepared);
-    if (sent.status === "ERROR") throw new Error(`submit failed: ${sent.errorResult}`);
-    let getResp = await this.server.getTransaction(sent.hash);
-    while (getResp.status === "NOT_FOUND") {
-      await new Promise((r) => setTimeout(r, 1000));
-      getResp = await this.server.getTransaction(sent.hash);
-    }
-    if (getResp.status !== "SUCCESS") {
-      const failed = getResp as rpc.Api.GetFailedTransactionResponse;
-      const detail = failed.resultXdr?.result()?.switch()?.name ?? getResp.status;
-      throw new Error(`tx failed: ${detail}`);
-    }
-    this.cfg.onTx?.(sent.hash, "commerce");
-    return decode(getResp.returnValue!);
-  }
-
-  private async simulate<T>(op: xdr.Operation, decode: (v: xdr.ScVal) => T): Promise<T> {
-    const ephemeral = Keypair.random();
-    const dummy = new Account(ephemeral.publicKey(), "0");
-    const tx = new TransactionBuilder(dummy, {
-      fee: BASE_FEE,
-      networkPassphrase: this.cfg.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const sim = await this.server.simulateTransaction(tx);
-        if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
-        const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
-        if (!result) throw new Error("no simulation result");
-        return decode(result.retval);
-      } catch (err) {
-        if (attempt === 3) throw err;
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
-      }
-    }
-    throw new Error("unreachable");
-  }
 }

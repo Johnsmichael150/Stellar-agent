@@ -81,21 +81,33 @@
   function disconnectWallet() {
     wallet.connected = false;
     wallet.publicKey = null;
-    // Clear cached state so the next session starts fresh
+    wallet.network = null;
+    // Clear all cached state so the next session starts fresh
     state.stats = null;
     state.wallets = null;
     state.agents = null;
     state.jobs = null;
     state.history = null;
+    // Invalidate server-side session token if present
+    var token = window.__sessionToken;
+    if (token) {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token },
+      }).catch(function() {});
+      window.__sessionToken = null;
+    }
     // Tell SWK to disconnect if the API supports it
     if (swkReady && StellarWalletsKit && typeof StellarWalletsKit.disconnect === "function") {
       try { StellarWalletsKit.disconnect(); } catch (e) {}
     }
     updateWalletUI();
-    // Re-show the SWK button
+    // Re-show the SWK connect button
     var btnWrapper = document.getElementById("swk-button-wrapper");
     if (btnWrapper) btnWrapper.style.display = "";
     toast("Wallet disconnected");
+    // Navigate to the root so the user lands on the connect prompt
+    window.location.hash = "#/";
     navigate();
   }
 
@@ -719,6 +731,8 @@
       + '<input class="form-input" id="cj-desc" value="Dashboard test job" placeholder="Job description..."></div>'
       + '<div class="form-group"><label class="form-label">Budget (MUSD units, 7 decimals)</label>'
       + '<input class="form-input" id="cj-budget" value="10000000" placeholder="10000000 = 1 MUSD"></div>'
+      + '<div class="form-group"><label class="form-label">Provider Address <span style="color:var(--text-muted);font-weight:400">(must be a registered agent)</span></label>'
+      + '<input class="form-input" id="cj-provider" placeholder="Leave blank to use default seller" autocomplete="off" spellcheck="false"></div>'
       + '<div class="modal-actions">'
       + '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>'
       + '<button class="btn btn-primary" onclick="window.__doCreateJob()">Create Job</button></div>'
@@ -730,16 +744,22 @@
     const budget = document.getElementById("cj-budget").value;
     const walletEl = document.getElementById("cj-wallet");
     const walletVal = walletEl ? walletEl.value : "buyer";
+    const providerEl = document.getElementById("cj-provider");
+    const providerVal = providerEl && providerEl.value.trim() ? providerEl.value.trim() : undefined;
     const overlay = document.querySelector(".modal-overlay");
     if (overlay) overlay.remove();
     showTxOverlay("Creating job on Stellar...");
     try {
       if (wallet.connected) {
-        const res = await signAndSubmit("/build/createJob", { description: description, budget: budget });
+        const params = { description: description, budget: budget };
+        if (providerVal) params.provider = providerVal;
+        const res = await signAndSubmit("/build/createJob", params);
         hideTxOverlay();
         toast("Job created! tx: " + (res.hash || "").slice(0, 8) + "...");
       } else {
-        const res = await api("/jobs/create", { method: "POST", body: { wallet: walletVal, description: description, budget: budget } });
+        const body = { wallet: walletVal, description: description, budget: budget };
+        if (providerVal) body.provider = providerVal;
+        const res = await api("/jobs/create", { method: "POST", body: body });
         hideTxOverlay();
         toast("Job #" + res.jobId + " created!");
       }

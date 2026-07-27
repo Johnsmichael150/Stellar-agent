@@ -94,20 +94,49 @@ app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync("agent.json", "u
 
 app.use(`/${OUTPUT_DIR}`, express.static(OUTPUT_DIR));
 
+// Brand voice guidelines accepted alongside the task — closes #299
+interface BrandVoice {
+  tone?: string;
+  audience?: string;
+  keywords?: string[];
+  [key: string]: unknown;
+}
+
+function buildCopyPrompt(task: string, brandVoice?: BrandVoice): string {
+  const base = `You are a professional copywriter. Write compelling website copy for:\n\n${task}`;
+  if (!brandVoice) {
+    return `${base}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`;
+  }
+  const voiceLines: string[] = [];
+  if (brandVoice.tone) voiceLines.push(`Tone/voice: ${brandVoice.tone}`);
+  if (brandVoice.audience) voiceLines.push(`Target audience: ${brandVoice.audience}`);
+  if (brandVoice.keywords?.length) voiceLines.push(`Keywords to incorporate: ${brandVoice.keywords.join(", ")}`);
+  const extras = Object.entries(brandVoice)
+    .filter(([k]) => !["tone", "audience", "keywords"].includes(k))
+    .map(([k, v]) => `${k}: ${JSON.stringify(v)}`);
+  voiceLines.push(...extras);
+  const voiceBlock = voiceLines.length
+    ? `\n\nBrand voice guidelines:\n${voiceLines.map((l) => `- ${l}`).join("\n")}`
+    : "";
+  return `${base}${voiceBlock}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`;
+}
+
 app.post("/job", limiter, async (req, res) => {
-  const { jobId, task } = req.body;
+  const { jobId, task, brandVoice } = req.body as { jobId?: unknown; task?: string; brandVoice?: BrandVoice };
   if (!jobId || !task) {
     res.status(400).json({ error: "missing jobId or task" });
     return;
   }
-  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}`);
+  if (brandVoice !== undefined && (typeof brandVoice !== "object" || Array.isArray(brandVoice))) {
+    res.status(400).json({ error: "brandVoice must be an object" });
+    return;
+  }
+  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}${brandVoice ? ` | brandVoice: ${JSON.stringify(brandVoice)}` : ""}`);
   res.json({ status: "accepted", jobId });
 
   try {
     console.log(`[${AGENT_ID}] Calling Groq...`);
-    const copy = await generate(
-      `You are a professional copywriter. Write compelling website copy for:\n\n${task}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`
-    );
+    const copy = await generate(buildCopyPrompt(task, brandVoice));
     if (copy.length < 20) {
       throw new Error(`Generated copy too short (${copy.length} chars)`);
     }

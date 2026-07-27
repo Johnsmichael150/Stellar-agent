@@ -29,23 +29,45 @@ interface ResearchOutput {
   sources: { title: string; url: string }[];
 }
 
-async function generate(task: string): Promise<ResearchOutput> {
+// Depth tiers control research thoroughness — closes #300
+type ResearchDepth = "brief" | "standard" | "deep";
+
+const DEPTH_CONFIG: Record<ResearchDepth, { sources: string; summaryGuidance: string }> = {
+  brief: {
+    sources: "2-3",
+    summaryGuidance: "Provide a concise 1-2 paragraph summary covering the key points.",
+  },
+  standard: {
+    sources: "3-8",
+    summaryGuidance: "Provide a thorough summary in markdown format with sections and inline citations.",
+  },
+  deep: {
+    sources: "8-15",
+    summaryGuidance:
+      "Provide an in-depth analysis in markdown format with multiple sections, sub-sections, comparisons, pros/cons, and inline citations. Leave no major angle unexplored.",
+  },
+};
+
+async function generate(task: string, depth: ResearchDepth = "standard"): Promise<ResearchOutput> {
+  const { sources, summaryGuidance } = DEPTH_CONFIG[depth];
   const res = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [
       {
         role: "user",
-        content: `You are a research analyst. Research the following topic thoroughly and return ONLY valid JSON (no markdown, no code fences) with this exact schema:
+        content: `You are a research analyst. Research the following topic and return ONLY valid JSON (no markdown, no code fences) with this exact schema:
 {
-  "summary": "comprehensive research summary in markdown format",
+  "summary": "research summary in markdown format",
   "sources": [
     { "title": "Source title", "url": "https://..." }
   ]
 }
 
-Topic: ${task}
+Research depth: ${depth}
+${summaryGuidance}
+Include ${sources} sources. Each source must have a real, verifiable URL. The summary should cite sources by their index [1], [2], etc.
 
-Each source must have a real, verifiable URL. Include 3-8 sources. The summary should cite sources by their index [1], [2], etc.`,
+Topic: ${task}`,
       },
     ],
   });
@@ -88,13 +110,22 @@ app.use(express.json());
 app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync("agent.json", "utf8"))));
 
 app.post("/job", limiter, async (req, res) => {
-  const { jobId, task } = req.body;
-  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}`);
+  const { jobId, task, depth } = req.body as { jobId?: unknown; task?: string; depth?: string };
+  const VALID_DEPTHS: ResearchDepth[] = ["brief", "standard", "deep"];
+  const resolvedDepth: ResearchDepth =
+    depth !== undefined && VALID_DEPTHS.includes(depth as ResearchDepth)
+      ? (depth as ResearchDepth)
+      : "standard";
+  if (depth !== undefined && !VALID_DEPTHS.includes(depth as ResearchDepth)) {
+    res.status(400).json({ error: `depth must be one of: ${VALID_DEPTHS.join(", ")}` });
+    return;
+  }
+  console.log(`[${AGENT_ID}] Job #${jobId}: ${task} | depth: ${resolvedDepth}`);
   res.json({ status: "accepted", jobId });
 
   try {
-    console.log(`[${AGENT_ID}] Calling Groq...`);
-    const research = await generate(task);
+    console.log(`[${AGENT_ID}] Calling Groq (depth: ${resolvedDepth})...`);
+    const research = await generate(task!, resolvedDepth);
     const sourceCount = research.sources.length;
     fs.mkdirSync("output", { recursive: true });
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(research, null, 2));

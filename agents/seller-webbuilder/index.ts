@@ -90,20 +90,47 @@ app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync("agent.json", "u
 
 app.use(`/${OUTPUT_DIR}`, express.static(OUTPUT_DIR));
 
+// Structured build spec accepted alongside or instead of a plain task — closes #298
+interface BuildSpec {
+  framework?: string;
+  pages?: string[];
+  theme?: string;
+  [key: string]: unknown;
+}
+
+function buildPrompt(task: string, buildSpec?: BuildSpec): string {
+  const base = `You are a professional web developer. Build a complete, self-contained HTML/CSS website for:\n\n${task}`;
+  if (!buildSpec) {
+    return `${base}\n\nReturn ONLY raw HTML — no markdown, no code fences. Must have inline CSS, ready to open in a browser.`;
+  }
+  const specLines: string[] = [];
+  if (buildSpec.framework) specLines.push(`Framework style: ${buildSpec.framework}`);
+  if (buildSpec.pages?.length) specLines.push(`Pages to include: ${buildSpec.pages.join(", ")}`);
+  if (buildSpec.theme) specLines.push(`Theme/styling: ${buildSpec.theme}`);
+  const extras = Object.entries(buildSpec)
+    .filter(([k]) => !["framework", "pages", "theme"].includes(k))
+    .map(([k, v]) => `${k}: ${JSON.stringify(v)}`);
+  specLines.push(...extras);
+  const specBlock = specLines.length ? `\n\nBuild specifications:\n${specLines.map((l) => `- ${l}`).join("\n")}` : "";
+  return `${base}${specBlock}\n\nReturn ONLY raw HTML — no markdown, no code fences. Must have inline CSS, ready to open in a browser.`;
+}
+
 app.post("/job", limiter, async (req, res) => {
-  const { jobId, task } = req.body;
+  const { jobId, task, buildSpec } = req.body as { jobId?: unknown; task?: string; buildSpec?: BuildSpec };
   if (!jobId || !task) {
     res.status(400).json({ error: "missing jobId or task" });
     return;
   }
-  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}`);
+  if (buildSpec !== undefined && (typeof buildSpec !== "object" || Array.isArray(buildSpec))) {
+    res.status(400).json({ error: "buildSpec must be an object" });
+    return;
+  }
+  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}${buildSpec ? ` | buildSpec: ${JSON.stringify(buildSpec)}` : ""}`);
   res.json({ status: "accepted", jobId });
 
   try {
     console.log(`[${AGENT_ID}] Calling Groq...`);
-    const html = await generate(
-      `You are a professional web developer. Build a complete, self-contained HTML/CSS website for:\n\n${task}\n\nReturn ONLY raw HTML — no markdown, no code fences. Must have inline CSS, ready to open in a browser.`
-    );
+    const html = await generate(buildPrompt(task, buildSpec));
 
     const stripped = html.replace(/```html\s*/gi, "").replace(/```/g, "").trim();
     if (stripped.length < 50 || !/<!DOCTYPE html|<html/i.test(stripped)) {

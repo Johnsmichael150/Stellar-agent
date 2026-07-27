@@ -7,8 +7,7 @@ import {
   BASE_FEE,
   Address,
   xdr,
-  StrKey,
-  rpc,
+  Account,
 } from "@stellar/stellar-sdk";
 import type { Agent, MarcConfig } from "./types.js";
 import { BaseClient } from "./baseClient.js";
@@ -16,28 +15,18 @@ import { BaseClient } from "./baseClient.js";
 /**
  * Typed wrapper around the `agent_identity` Soroban contract.
  *
- * Provides methods to register agents, query agent data, update URIs, and manage
- * ownership. All methods handle ScVal encoding/decoding, transaction building, and
- * submission via Soroban RPC automatically.
- *
- * @example
- * ```typescript
- * const client = new IdentityClient(TESTNET);
- * const agentId = await client.register(ownerKeypair, "ipfs://metadata-uri");
- * const agent = await client.getAgent(agentId);
- * await client.disconnect();
- * ```
+ * Provides `register`, `getAgent`, `agentOf`, `updateUri`, and `deregister`
+ * methods that handle ScVal encoding/decoding, transaction building, and
+ * submission via Soroban RPC.
  */
 export class IdentityClient extends BaseClient {
   private contract: Contract;
 
-  /**
-   * Initialize the IdentityClient with a configuration.
-   *
-   * @param cfg - Configuration containing RPC URL, network passphrase, contract address, etc.
-   */
-  constructor(cfg: MarcConfig) {
-    super(cfg);
+  constructor(private cfg: MarcConfig) {
+    this.server = new rpc.Server(cfg.rpcUrl, {
+      allowHttp: cfg.rpcUrl.startsWith("http://"),
+      timeout: 15000,
+    });
     this.contract = new Contract(cfg.identityContract);
   }
 
@@ -57,16 +46,6 @@ export class IdentityClient extends BaseClient {
    * @returns The assigned on-chain agent ID as a `bigint`.
    */
   async register(owner: Keypair, uri: string): Promise<bigint> {
-    // Client-side guard: validate the owner's public key is a well-formed
-    // Stellar Ed25519 address (starts with 'G', 56 chars, valid checksum).
-    // Without this check the error surfaces as an opaque RPC failure; catching
-    // it here gives callers a clear, actionable message before any network call.
-    if (!StrKey.isValidEd25519PublicKey(owner.publicKey())) {
-      throw new Error(
-        `register: invalid Stellar address "${owner.publicKey()}" — must be a valid Ed25519 public key (starts with G)`,
-      );
-    }
-
     const op = this.contract.call(
       "register",
       new Address(owner.publicKey()).toScVal(),
@@ -75,12 +54,7 @@ export class IdentityClient extends BaseClient {
     return await this.invoke(owner, op, (v) => BigInt(scValToNative(v) as string), "identity");
   }
 
-  /**
-   * Look up an agent by its numeric ID.
-   *
-   * @param id - The agent's on-chain ID
-   * @returns The agent record, or null if the ID does not exist
-   */
+  /** Look up an agent by its numeric ID. Returns null if not found. */
   async getAgent(id: bigint): Promise<Agent | null> {
     const op = this.contract.call(
       "get_agent",
@@ -97,12 +71,7 @@ export class IdentityClient extends BaseClient {
     });
   }
 
-  /**
-   * Reverse-lookup: find the agent ID owned by an address.
-   *
-   * @param owner - The owner's Stellar address
-   * @returns The agent ID owned by this address, or null if none exists
-   */
+  /** Reverse-lookup: find the agent ID owned by `owner`. */
   async agentOf(owner: string): Promise<bigint | null> {
     const op = this.contract.call(
       "agent_of",
@@ -114,13 +83,7 @@ export class IdentityClient extends BaseClient {
     });
   }
 
-  /**
-   * Update an agent's metadata URI (owner-only).
-   *
-   * @param owner - The agent's owner keypair for authorization
-   * @param id - The agent's ID
-   * @param uri - New metadata URI (e.g., IPFS or HTTP URL)
-   */
+  /** Update an agent's metadata URI (owner-only). */
   async updateUri(owner: Keypair, id: bigint, uri: string): Promise<void> {
     const op = this.contract.call(
       "update_uri",
@@ -131,12 +94,12 @@ export class IdentityClient extends BaseClient {
     await this.invoke(owner, op, () => undefined, "identity");
   }
 
-  /**
-   * List all registered agents by scanning sequential IDs up to maxId.
-   *
-   * @param maxId - Maximum ID to scan (default 200). Continues past gaps.
-   * @returns Array of all registered agents with IDs from 1 to maxId
-   */
+  /** Disconnect any underlying resources. */
+  disconnect(): void {
+    // No-op for the current implementation.
+  }
+
+  /** List all registered agents by scanning sequential IDs until a gap. */
   async listAgents(maxId = 200n): Promise<Agent[]> {
     const agents: Agent[] = [];
     for (let id = 1n; id <= maxId; id++) {
@@ -164,12 +127,7 @@ export class IdentityClient extends BaseClient {
     await this.invokeMultiSig(owner, newOwner, op, "identity");
   }
 
-  /**
-   * Permanently remove an agent from the registry (owner-only).
-   *
-   * @param owner - The agent's owner keypair for authorization
-   * @param id - The agent's ID to deregister
-   */
+  /** Permanently remove an agent (owner-only). */
   async deregister(owner: Keypair, id: bigint): Promise<void> {
     const op = this.contract.call(
       "deregister",
@@ -179,7 +137,6 @@ export class IdentityClient extends BaseClient {
     await this.invoke(owner, op, () => undefined, "identity");
   }
 
-
   /**
    * Get the balance of `address` for a given token.
    * Pass `"native"` for XLM (returns stroops as bigint),
@@ -187,9 +144,9 @@ export class IdentityClient extends BaseClient {
    */
   async getBalance(address: string, token: string): Promise<bigint> {
     if (token === "native") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const account = (await this.server.getAccount(address)) as any;
-      const xlmBalance = account.balances.find((b: any) => b.asset_type === "native");
+      const account = await this.server.getAccount(address);
+      const balances = (account as unknown as { balances?: Array<{ asset_type?: string; balance?: string }> }).balances ?? [];
+      const xlmBalance = balances.find((b) => b.asset_type === "native");
       return BigInt(Math.round(Number(xlmBalance?.balance ?? "0") * 1e7));
     }
     const tokenContract = new Contract(token);

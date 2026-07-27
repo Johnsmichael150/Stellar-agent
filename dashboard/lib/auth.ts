@@ -60,7 +60,7 @@ export function verifyNonceSignature(publicKey: string, nonce: string, signature
 
     // Verify the signature by checking if the provided XDR was signed by this publicKey
     try {
-      const tx = TransactionBuilder.fromXDR(signature, Networks.TESTNET_NETWORK_PASSPHRASE);
+      const tx = TransactionBuilder.fromXDR(signature, Networks.TESTNET);
       const keypair = Keypair.fromPublicKey(publicKey);
 
       // Check if the transaction is signed by the claimed public key

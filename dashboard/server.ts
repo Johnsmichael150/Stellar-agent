@@ -1,8 +1,9 @@
 import express, { type Request, type Response, type NextFunction } from "express";
+import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import { z, ZodError } from "zod";
-import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey } from "@stellar/stellar-sdk";
+import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey, Networks } from "@stellar/stellar-sdk";
 import { cfg, buyerKeypair, sellerKeypair, getKeypair, DEMO_MODE } from "./lib/config.js";
 import {
   getAllAgents,
@@ -26,6 +27,9 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// CSP is disabled: the dashboard loads the wallet-kit bundle from a CDN and
+// fonts from Google Fonts, which helmet's default script-src/style-src would block.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
 // Landing page at root
@@ -38,6 +42,9 @@ app.use("/app", express.static(path.join(__dirname, "public")));
 const server = new rpc.Server(cfg.rpcUrl, {
   allowHttp: cfg.rpcUrl.startsWith("http://"),
 });
+
+const identityContract = new Contract(cfg.identityContract);
+const commerceContract = new Contract(cfg.commerceContract);
 
 const allowedOrigins = new Set(
   (process.env.DASHBOARD_ORIGINS ?? "http://localhost:3000,http://127.0.0.1:3000")
@@ -67,8 +74,14 @@ const numericIdParamSchema = z.object({
 });
 
 const registerAgentSchema = z.object({
-  wallet: stellarAddressSchema,
+  wallet: z.enum(["buyer", "seller", "freighter"]),
+  publicKey: stellarAddressSchema.optional(),
   uri: z.string().min(1).optional(),
+}).refine(data => {
+  if (data.wallet === "freighter" && !data.publicKey) {
+    throw new Error("publicKey is required when wallet is freighter");
+  }
+  return true;
 });
 
 const createJobSchema = z.object({
@@ -255,6 +268,9 @@ function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction)
 function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === "bigint") return obj.toString();
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj instanceof Map) return Array.from(obj.entries()).map(([k, v]) => [serialize(k), serialize(v)]);
+  if (obj instanceof Set) return Array.from(obj).map(serialize);
   if (Array.isArray(obj)) return obj.map(serialize);
   if (typeof obj === "object") {
     const result: Record<string, unknown> = {};
@@ -271,17 +287,57 @@ function serialize(obj: unknown): unknown {
   return obj;
 }
 
+const HORIZON_URL =
+  process.env.HORIZON_URL ??
+  (cfg.networkPassphrase === Networks.PUBLIC
+    ? "https://horizon.stellar.org"
+    : "https://horizon-testnet.stellar.org");
+
 /** Get XLM balance from Horizon */
 async function getXlmBalance(pubkey: string): Promise<string> {
   try {
-    const horizonUrl = "https://horizon-testnet.stellar.org";
-    const resp = await fetch(`${horizonUrl}/accounts/${pubkey}`);
+    const resp = await fetch(`${HORIZON_URL}/accounts/${pubkey}`);
     if (!resp.ok) return "0";
     const data = await resp.json() as { balances: Array<{ asset_type: string; balance: string }> };
     const native = data.balances.find((b: { asset_type: string }) => b.asset_type === "native");
     return native?.balance ?? "0";
   } catch {
     return "0";
+  }
+}
+
+/** Simulate a read-only contract call with no arguments and return its native value */
+async function simulateReadCall(contract: Contract, method: string): Promise<unknown> {
+  const op = contract.call(method);
+  const ephemeral = Keypair.random();
+  const dummy = new Account(ephemeral.publicKey(), "0");
+  const tx = new TransactionBuilder(dummy, {
+    fee: BASE_FEE,
+    networkPassphrase: cfg.networkPassphrase,
+  })
+    .addOperation(op)
+    .setTimeout(30)
+    .build();
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) return null;
+  const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
+  if (!result) return null;
+  return scValToNative(result.retval);
+}
+
+const tokenDecimalsCache = new Map<string, number>();
+
+/** Query and cache a SAC token's `decimals()` value, defaulting to 7 on failure */
+async function getTokenDecimals(tokenAddress: string): Promise<number> {
+  const cached = tokenDecimalsCache.get(tokenAddress);
+  if (cached !== undefined) return cached;
+  try {
+    const decimals = Number(await simulateReadCall(new Contract(tokenAddress), "decimals"));
+    if (!Number.isFinite(decimals)) return 7;
+    tokenDecimalsCache.set(tokenAddress, decimals);
+    return decimals;
+  } catch {
+    return 7;
   }
 }
 
@@ -304,10 +360,12 @@ async function getTokenBalance(pubkey: string): Promise<string> {
     const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
     if (!result) return "0";
     const raw = scValToNative(result.retval);
-    // i128 comes back as bigint — format with 7 decimals
     const val = BigInt(raw);
-    const whole = val / 10_000_000n;
-    const frac = (val % 10_000_000n).toString().padStart(7, "0");
+    const decimals = await getTokenDecimals(cfg.usdcToken);
+    if (decimals === 0) return val.toString();
+    const divisor = 10n ** BigInt(decimals);
+    const whole = val / divisor;
+    const frac = (val % divisor).toString().padStart(decimals, "0");
     return `${whole}.${frac}`;
   } catch {
     return "0";
@@ -418,6 +476,16 @@ app.get("/api/agents", async (_req, res) => {
 app.post("/api/agents/register", optionalAuthMiddleware, async (req, res) => {
   try {
     const parsed = registerAgentSchema.parse(req.body);
+    if (parsed.wallet === "freighter") {
+      const op = identityContract.call(
+        "register",
+        new Address(parsed.publicKey!).toScVal(),
+        nativeToScVal(parsed.uri || "ipfs://dashboard-agent", { type: "string" }),
+      );
+      const txXdr = await buildTxXdr(parsed.publicKey!, op);
+      res.json({ xdr: txXdr });
+      return;
+    }
     const kp = getKeypair(parsed.wallet);
     const agentId = await identity.register(kp, parsed.uri || "ipfs://dashboard-agent");
     invalidateAgents();
@@ -445,7 +513,8 @@ app.get("/api/jobs", async (req, res) => {
 // POST /api/jobs/create
 app.post("/api/jobs/create", optionalAuthMiddleware, async (req, res) => {
   try {
-    const { wallet, provider, evaluator, budget, description } = req.body;
+    const parsed = createJobSchema.parse(req.body);
+    const { wallet, provider, evaluator, budget, description } = parsed;
     const kp = getKeypair(wallet);
     const providerAddr = provider || sellerKeypair.publicKey();
     const evaluatorAddr = evaluator || kp.publicKey();
@@ -548,9 +617,6 @@ app.put("/api/jobs/:id", optionalAuthMiddleware, async (req, res) => {
 });
 
 // --- Freighter wallet endpoints: build unsigned XDR ---
-
-const identityContract = new Contract(cfg.identityContract);
-const commerceContract = new Contract(cfg.commerceContract);
 
 const pendingTxHashes = new Set<string>();
 

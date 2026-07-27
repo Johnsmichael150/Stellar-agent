@@ -788,6 +788,9 @@
   };
 
   window.__cancelJob = async function(id) {
+    const confirmed = window.confirm("Cancel this job and refund the escrowed funds?");
+    if (!confirmed) return;
+
     showTxOverlay("Cancelling job & refunding...");
     try {
       if (wallet.connected) {
@@ -831,7 +834,7 @@
     showTxOverlay("Registering agent on Stellar...");
     try {
       if (wallet.connected) {
-        const res = await signAndSubmit("/build/register", { uri: uri });
+        const res = await signAndSubmit("/agents/register", { wallet: "freighter", uri: uri });
         hideTxOverlay();
         toast("Agent registered! tx: " + (res.hash || "").slice(0, 8) + "...");
       } else {

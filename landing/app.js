@@ -92,19 +92,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ── Smooth scroll for nav links ──
-  const NAV_HEIGHT = 72;
-  document.querySelectorAll('a[href^="#"]').forEach((link) => {
-    link.addEventListener("click", (e) => {
-      const target = document.querySelector(link.getAttribute("href"));
-      if (target) {
-        e.preventDefault();
-        const top = target.getBoundingClientRect().top + window.scrollY - NAV_HEIGHT;
-        window.scrollTo({ top, behavior: "smooth" });
-      }
-    });
-  });
-
   // ── Mobile hamburger toggle ──
   const hamburger = document.getElementById("hamburger");
   const navLinksContainer = document.getElementById("nav-links");
@@ -116,6 +103,24 @@ document.addEventListener("DOMContentLoaded", () => {
     link.addEventListener("click", () => {
       navLinksContainer.classList.remove("nav-open");
       hamburger?.setAttribute("aria-expanded", "false");
+    });
+  });
+
+  // ── Smooth scroll for nav links and CTA anchors ──
+  const NAV_HEIGHT = 72;
+  document.querySelectorAll('a[href^="#"]').forEach((link) => {
+    link.addEventListener("click", (e) => {
+      const href = link.getAttribute("href");
+      if (!href || href === "#") return;
+      const target = document.querySelector(href);
+      if (target) {
+        e.preventDefault();
+        const top = target.getBoundingClientRect().top + window.scrollY - NAV_HEIGHT;
+        window.scrollTo({ top, behavior: "smooth" });
+        // Close mobile nav if open
+        navLinksContainer?.classList.remove("nav-open");
+        hamburger?.setAttribute("aria-expanded", "false");
+      }
     });
   });
 });

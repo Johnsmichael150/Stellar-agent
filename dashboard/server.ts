@@ -157,13 +157,17 @@ function corsOriginHandler(req: Request, res: Response, next: NextFunction) {
   }
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   return next();
 }
 
 app.use(corsOriginHandler);
-app.options("*", (_req, res) => res.sendStatus(204));
+app.options("*", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.sendStatus(204);
+});
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/healthz", (_req, res) => res.send("ok"));

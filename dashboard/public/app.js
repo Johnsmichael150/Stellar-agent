@@ -627,7 +627,7 @@
     // Build a unified event list: jobs (all statuses) + agent registrations
     var events = [];
     for (var j of jobs) {
-      events.push({ kind: "job", id: j.id, status: j.status, desc: j.description || "—", budget: j.budget, actor: j.client });
+      events.push({ kind: "job", id: j.id, status: j.status, desc: j.description || "—", budget: j.budget, actor: j.client, deliverable: j.deliverable || null });
     }
     for (var a of agents) {
       events.push({ kind: "agent", id: a.id, uri: a.uri, actor: a.owner });
@@ -646,41 +646,77 @@
       return;
     }
 
+    // Filter tabs for history
+    var histFilter = window.__histFilter || "All";
+    var histFilters = ["All", "Jobs", "Agents", "Completed", "Cancelled"];
+    var filteredEvents = events.filter(function(ev) {
+      if (histFilter === "All") return true;
+      if (histFilter === "Jobs") return ev.kind === "job";
+      if (histFilter === "Agents") return ev.kind === "agent";
+      if (histFilter === "Completed") return ev.kind === "job" && ev.status === "Completed";
+      if (histFilter === "Cancelled") return ev.kind === "job" && ev.status === "Cancelled";
+      return true;
+    });
+
+    var tabs = '<div class="filter-tabs">';
+    for (var hf of histFilters) {
+      tabs += '<button class="filter-tab ' + (hf === histFilter ? 'active' : '') + '" onclick="window.__filterHistory(\'' + hf + '\')">' + hf + '</button>';
+    }
+    tabs += '</div>';
+
     var rows = '<div class="history-list">';
-    for (var ev of events) {
-      var icon, label, meta, badge;
-      if (ev.kind === "job") {
-        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
-        label = escapeHtml(ev.desc);
-        meta = 'Client: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + formatMusd(ev.budget) + ' MUSD';
-        badge = statusBadge(ev.status);
-      } else {
-        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>';
-        label = 'Agent registered';
-        meta = 'Owner: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + escapeHtml(ev.uri || '');
-        badge = '<span class="status-badge status-Completed"><span class="dot"></span>Registered</span>';
+    if (filteredEvents.length === 0) {
+      rows += '<div class="empty-state" style="margin-top:24px">'
+        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>'
+        + '<div class="empty-title">No matching records</div>'
+        + '<div class="empty-desc">Try a different filter.</div></div>';
+    } else {
+      for (var ev of filteredEvents) {
+        var icon, label, meta, badge;
+        if (ev.kind === "job") {
+          icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
+          label = escapeHtml(ev.desc);
+          var deliverablePart = ev.deliverable ? ' &nbsp;·&nbsp; <a href="' + escapeHtml(ev.deliverable) + '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:500">View Deliverable ↗</a>' : '';
+          meta = 'Client: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + formatMusd(ev.budget) + ' USDC' + deliverablePart;
+          badge = statusBadge(ev.status);
+        } else {
+          icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>';
+          label = 'Agent registered';
+          meta = 'Owner: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + escapeHtml(ev.uri || '');
+          badge = '<span class="status-badge status-Completed"><span class="dot"></span>Registered</span>';
+        }
+        rows += '<div class="history-row">'
+          + '<div class="history-icon ' + (ev.kind === 'job' ? 'hist-job' : 'hist-agent') + '">' + icon + '</div>'
+          + '<div class="history-body">'
+          + '<div class="history-label">' + label + '</div>'
+          + '<div class="history-meta">' + meta + '</div>'
+          + '</div>'
+          + '<div class="history-right">'
+          + '<div class="history-id">#' + escapeHtml(String(ev.id)) + '</div>'
+          + badge
+          + '</div>'
+          + '</div>';
       }
-      rows += '<div class="history-row">'
-        + '<div class="history-icon ' + (ev.kind === 'job' ? 'hist-job' : 'hist-agent') + '">' + icon + '</div>'
-        + '<div class="history-body">'
-        + '<div class="history-label">' + label + '</div>'
-        + '<div class="history-meta">' + meta + '</div>'
-        + '</div>'
-        + '<div class="history-right">'
-        + '<div class="history-id">#' + escapeHtml(String(ev.id)) + '</div>'
-        + badge
-        + '</div>'
-        + '</div>';
     }
     rows += '</div>';
 
-    var summary = '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(3,1fr)">'
+    var completedCount = jobs.filter(function(j) { return j.status === "Completed"; }).length;
+    var cancelledCount = jobs.filter(function(j) { return j.status === "Cancelled"; });
+    var totalVolume = 0;
+    for (var cj of jobs.filter(function(j) { return j.status === "Completed"; })) {
+      totalVolume += parseFloat(formatMusd(cj.budget));
+    }
+
+    var summary = '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(4,1fr)">'
       + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Jobs</div>'
       + '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>'
       + '</div><div class="stat-value">' + jobs.length + '</div></div>'
       + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Completed</div>'
       + '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>'
-      + '</div><div class="stat-value">' + jobs.filter(function(j) { return j.status === "Completed"; }).length + '</div></div>'
+      + '</div><div class="stat-value">' + completedCount + '</div></div>'
+      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Settled</div>'
+      + '<div class="stat-icon amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg></div>'
+      + '</div><div class="stat-value">' + totalVolume.toFixed(2) + ' <span style="font-size:12px;color:var(--text-muted);font-weight:400">USDC</span></div></div>'
       + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Agents Registered</div>'
       + '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>'
       + '</div><div class="stat-value">' + agents.length + '</div></div>'
@@ -688,9 +724,14 @@
 
     setPage(
       '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
-      + summary + rows
+      + summary + tabs + rows
     );
   }
+
+  window.__filterHistory = function(filter) {
+    window.__histFilter = filter;
+    renderHistory();
+  };
 
   // ── Global Actions ──
 

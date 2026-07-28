@@ -138,8 +138,6 @@ fn deregister_emits_agent_deregistered_event() {
 }
 
 #[test]
-#[should_panic(expected = "AgentNotFound")]
-#[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
 fn deregister_removes_agent_and_owner_lookup() {
     let env = Env::default();
     env.mock_all_auths();
@@ -150,8 +148,68 @@ fn deregister_removes_agent_and_owner_lookup() {
     let id = client.register(&alice, &String::from_str(&env, "ipfs://a.json"));
     client.deregister(&alice, &id);
 
-    client.get_agent(&id).unwrap();
+    // Agent record must be gone.
+    assert_eq!(client.get_agent(&id), None);
+    // OwnerToId slot must be freed.
     assert_eq!(client.agent_of(&alice), None);
+}
+
+/// Regression test for issue #321 — positive case.
+///
+/// After re-registering, OwnerToId[alice] must still point to the new agent.
+/// The companion test `deregister_stale_id_panics_after_re_registration`
+/// confirms that a stale deregister(old_id) call fails rather than silently
+/// corrupting the mapping.
+#[test]
+fn deregister_re_registered_owner_mapping_survives() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+
+    // register → deregister → re-register
+    let id1 = client.register(&alice, &String::from_str(&env, "ipfs://a1.json"));
+    client.deregister(&alice, &id1);
+    let id2 = client.register(&alice, &String::from_str(&env, "ipfs://a2.json"));
+
+    // OwnerToId[alice] must point to the new agent (#2), not be cleared.
+    assert_eq!(id2, 2);
+    assert_eq!(
+        client.agent_of(&alice),
+        Some(id2),
+        "OwnerToId should point to the re-registered agent"
+    );
+    // Old agent record is gone; new one is healthy.
+    assert_eq!(client.get_agent(&id1), None);
+    let agent2 = client.get_agent(&id2).unwrap();
+    assert_eq!(agent2.owner, alice);
+}
+
+/// Regression test for issue #321 — stale deregister panics on missing record.
+///
+/// A replayed/stale deregister(old_id) after the owner has re-registered must
+/// panic because the agent record for old_id no longer exists. With the fix in
+/// place this panic fires before any storage mutation, so OwnerToId[alice] is
+/// never touched.
+#[test]
+#[should_panic(expected = "agent not found")]
+fn deregister_stale_id_panics_after_re_registration() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+
+    let id1 = client.register(&alice, &String::from_str(&env, "ipfs://a1.json"));
+    client.deregister(&alice, &id1);
+    // Re-register so alice now owns agent #2.
+    client.register(&alice, &String::from_str(&env, "ipfs://a2.json"));
+
+    // Stale call: agent #1 record is gone → must panic with "agent not found".
+    client.deregister(&alice, &id1);
 }
 
 #[test]

@@ -112,32 +112,52 @@ pub struct Unpaused {
     pub timestamp: u64,
 }
 
+/// Emitted when admin/treasury are updated via `re_init`.
+#[contractevent]
+pub struct ReInitialized {
+    #[topic]
+    pub admin: Address,
+    pub new_admin: Address,
+    pub new_treasury: Address,
+}
+
 #[contract]
 pub struct AgenticCommerceContract;
 
 #[contractimpl]
 impl AgenticCommerceContract {
     /// Initializer. Sets admin, treasury, default fee (1%), and job id counter.
-    /// Panics if the contract has already been initialized.
+    /// Panics if the contract has already been initialized — use `re_init` to
+    /// update admin or treasury after the first init.
     pub fn init(env: Env, admin: Address, treasury: Address) {
         admin.require_auth();
-        if !env.storage().instance().has(&DataKey::Admin) {
-            env.storage().instance().set(&DataKey::NextId, &1u64);
-            env.storage().instance().set(&DataKey::Admin, &admin);
-            env.storage().instance().set(&DataKey::Treasury, &treasury);
-            env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
-            return;
+        if env.storage().instance().has(&DataKey::Admin) {
+            panic!("already initialized");
         }
-
-        let current_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        if admin != current_admin {
-            panic!("not admin");
-        }
-
+        env.storage().instance().set(&DataKey::NextId, &1u64);
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
-        env.storage().instance().set(&DataKey::Version, &1u32);
+    }
+
+    /// Re-initialize admin and treasury. Only the current admin may call this.
+    /// Preserves existing `fee_bps` and `next_id` so in-flight jobs are not
+    /// disrupted. Emits a `ReInitialized` event.
+    pub fn re_init(env: Env, caller: Address, new_admin: Address, new_treasury: Address) {
+        caller.require_auth();
+        let current_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != current_admin {
+            panic!("not admin");
+        }
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.storage().instance().set(&DataKey::Treasury, &new_treasury);
+
+        ReInitialized {
+            admin: caller,
+            new_admin,
+            new_treasury,
+        }
+        .publish(&env);
     }
 
     /// Create a job and escrow `budget` from the `client_addr` into the contract.

@@ -60,23 +60,36 @@ fn init_sets_admin_and_treasury() {
 }
 
 #[test]
-fn init_allows_reinit_by_same_admin() {
+#[should_panic(expected = "already initialized")]
+fn init_panics_on_double_init() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, treasury) = setup(&env);
-    // Re-initialization by the same admin should succeed (for updating treasury/fee params)
+    // Second init() call should panic
     client.init(&admin, &treasury);
 }
 
 #[test]
+fn re_init_updates_admin_and_treasury() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+    let new_admin = Address::generate(&env);
+    let new_treasury = Address::generate(&env);
+    client.re_init(&admin, &new_admin, &new_treasury);
+    // Verify new admin can call admin-only functions
+    let newest_treasury = Address::generate(&env);
+    client.set_treasury(&new_admin, &newest_treasury);
+}
+
+#[test]
 #[should_panic(expected = "not admin")]
-fn init_rejects_reinit_by_different_admin() {
+fn re_init_rejects_non_admin() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, _admin, treasury) = setup(&env);
-    let different_admin = Address::generate(&env);
-    // Re-initialization by a different admin should panic
-    client.init(&different_admin, &treasury);
+    let mallory = Address::generate(&env);
+    client.re_init(&mallory, &mallory, &treasury);
 }
 
 #[test]

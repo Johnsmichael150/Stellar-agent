@@ -214,6 +214,9 @@ function getEnvRpcUrl(defaultRpcUrl: string) {
  *
  * Defaults to the latest deployed testnet addresses when available, while still
  * allowing environment overrides for custom RPC endpoints or deployment paths.
+ *
+ * NOTE: `usdcToken` here is Circle's testnet USDC SAC. The demo and dashboard
+ * use a custom MUSD token instead — use the `DEMO` preset for those workflows.
  */
 export const TESTNET: PresetConfig = {
   network: "stellar-testnet",
@@ -231,6 +234,19 @@ export const MAINNET: PresetConfig = {
   networkPassphrase: "Public Global Stellar Network ; September 2015",
   rpcUrl: getEnvRpcUrl("https://soroban-rpc.mainnet.stellar.org"),
   ...resolveDeploymentValues("mainnet"),
+};
+
+/**
+ * Demo preset — identical to TESTNET but with the custom MUSD token used by
+ * the Bear Protocol demo and dashboard instead of Circle's testnet USDC.
+ *
+ * Use this preset when running `./start-agents.sh` or the dashboard locally.
+ * Swap back to `TESTNET` when integrating with Circle USDC on testnet.
+ */
+export const DEMO: PresetConfig = {
+  ...TESTNET,
+  usdcToken: (getEnvValue("MARC_DEMO_MUSD_TOKEN") ||
+    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA") as Address,
 };
 
 export function loadConfig(network: "testnet" | "mainnet"): PresetConfig {

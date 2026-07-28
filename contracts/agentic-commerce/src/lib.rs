@@ -1,5 +1,15 @@
 #![no_std]
-use soroban_sdk::{contract, contractevent, contractimpl, contracttype, token, Address, Env, String};
+use soroban_sdk::{contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token, Address, Env, String};
+
+/// Contract-level error codes for agentic-commerce (#323).
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    /// client == provider: a client cannot escrow funds to themselves.
+    SelfEscrow = 1,
+    /// provider == evaluator: the party delivering work cannot also approve it.
+    InvalidParties = 2,
+}
 
 /// Lifecycle states for a job escrow.
 #[contracttype]
@@ -172,8 +182,13 @@ impl AgenticCommerceContract {
         if budget <= 0 {
             panic!("budget must be positive");
         }
+        // Party validation (#323): prevent self-escrow and invalid party
+        // combinations before any storage reads or token transfers.
+        if client_addr == provider {
+            panic_with_error!(&env, Error::SelfEscrow);
+        }
         if provider == evaluator {
-            panic!("provider cannot be evaluator");
+            panic_with_error!(&env, Error::InvalidParties);
         }
 
         let next: u64 = env

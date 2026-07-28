@@ -363,3 +363,83 @@ fn create_job_rejects_call_before_init() {
         &String::from_str(&env, "job before init"),
     );
 }
+
+// ---------------------------------------------------------------------------
+// Issue #323 — party validation tests
+// ---------------------------------------------------------------------------
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn create_job_rejects_client_as_provider() {
+    // client == provider → SelfEscrow (error code 1)
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let evaluator = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    // buyer is both client and provider — must be rejected.
+    client.create_job(
+        &buyer,
+        &buyer,
+        &evaluator,
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "self-escrow attempt"),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn create_job_rejects_provider_as_evaluator() {
+    // provider == evaluator → InvalidParties (error code 2)
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    // seller is both provider and evaluator — must be rejected.
+    client.create_job(
+        &buyer,
+        &seller,
+        &seller,
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "provider-as-evaluator attempt"),
+    );
+}
+
+#[test]
+fn create_job_allows_client_as_evaluator() {
+    // client == evaluator is explicitly permitted — this is the common pattern
+    // used throughout the existing test suite (buyer self-approves).
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    let job_id = client.create_job(
+        &buyer,
+        &seller,
+        &buyer, // client == evaluator — allowed
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "buyer self-evaluates"),
+    );
+
+    let job = client.get_job(&job_id).unwrap();
+    assert_eq!(job.client, buyer);
+    assert_eq!(job.evaluator, buyer);
+    assert_eq!(job.status, JobStatus::Funded);
+}

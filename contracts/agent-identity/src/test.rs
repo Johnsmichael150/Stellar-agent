@@ -332,3 +332,115 @@ fn deregister_allows_same_owner_to_re_register() {
     assert_eq!(id2, 2);
     assert_eq!(client.agent_of(&alice), Some(2u64));
 }
+
+// ---------------------------------------------------------------------------
+// Issue #322 — storage rent bump tests
+//
+// Soroban's test environment does not enforce TTL expiry, so we cannot
+// directly assert "entry still alive after N ledgers". What we CAN assert is
+// that the contract operations continue to behave correctly after a sequence
+// of writes and reads — which implicitly exercises the extend_ttl code paths
+// without panicking.  If extend_ttl is called with an invalid key or wrong
+// argument types the test environment will panic at that call, catching
+// regressions at the unit-test level.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn register_ttl_bump_does_not_panic() {
+    // extend_ttl is called inside register() for both Agent and OwnerToId
+    // keys. This test confirms the calls are well-formed (right key type,
+    // valid threshold/bump values) by verifying the agent is readable after
+    // registration — the test env would panic inside extend_ttl otherwise.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://a.json"));
+
+    // Both entries must still be readable immediately after register().
+    assert!(client.get_agent(&id).is_some());
+    assert_eq!(client.agent_of(&alice), Some(id));
+}
+
+#[test]
+fn update_uri_ttl_bump_does_not_panic() {
+    // extend_ttl is called inside update_uri() for the Agent key.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://v1.json"));
+    client.update_uri(&alice, &id, &String::from_str(&env, "ipfs://v2.json"));
+
+    let agent = client.get_agent(&id).unwrap();
+    assert_eq!(agent.uri, String::from_str(&env, "ipfs://v2.json"));
+}
+
+#[test]
+fn update_owner_ttl_bump_does_not_panic() {
+    // extend_ttl is called inside update_owner() for both OwnerToId(new_owner)
+    // and Agent(id) keys.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://alice.json"));
+    client.update_owner(&alice, &id, &bob);
+
+    // Both entries must be readable after the transfer.
+    assert_eq!(client.agent_of(&alice), None);
+    assert_eq!(client.agent_of(&bob), Some(id));
+    assert_eq!(client.get_agent(&id).unwrap().owner, bob);
+}
+
+#[test]
+fn get_agent_read_ttl_bump_does_not_panic() {
+    // extend_ttl is called inside get_agent() when the entry exists.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://a.json"));
+
+    // Multiple reads must all succeed — each triggers extend_ttl internally.
+    assert!(client.get_agent(&id).is_some());
+    assert!(client.get_agent(&id).is_some());
+}
+
+#[test]
+fn agent_of_read_ttl_bump_does_not_panic() {
+    // extend_ttl is called inside agent_of() when the entry exists.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    let alice = Address::generate(&env);
+    let id = client.register(&alice, &String::from_str(&env, "ipfs://a.json"));
+
+    assert_eq!(client.agent_of(&alice), Some(id));
+    assert_eq!(client.agent_of(&alice), Some(id));
+}
+
+#[test]
+fn get_agent_missing_does_not_bump_ttl() {
+    // extend_ttl must NOT be called when get_agent returns None (no entry to
+    // bump). The test env panics if extend_ttl is called on a non-existent key,
+    // so this also serves as a guard against that mistake.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    // id 99 was never registered.
+    assert_eq!(client.get_agent(&99u64), None);
+}

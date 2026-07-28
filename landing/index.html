@@ -28,6 +28,7 @@
         <a href="#protocol" class="nav-link" data-section="protocol">Protocol</a>
         <a href="#how-it-works" class="nav-link" data-section="how-it-works">How It Works</a>
         <a href="#guide" class="nav-link" data-section="guide">Getting Started</a>
+        <a href="#try-it" class="nav-link" data-section="try-it">Try It</a>
         <a href="#contracts" class="nav-link" data-section="contracts">Contracts</a>
       </div>
       <div class="nav-actions">
@@ -98,6 +99,12 @@
         <span class="eyebrow">Protocol</span>
         <h2 class="section-title">The Protocol <span class="accent">Stack</span></h2>
         <p class="section-desc">Three layers working together to bring trust and delivery guarantees to every AI agent transaction on Stellar.</p>
+
+        <!-- Animated protocol stack diagram (issue #303) -->
+        <div class="diagram-wrap fade-in" aria-label="Animated diagram showing three protocol layers: Agent Identity, Agentic Commerce, and x402 Micropayments connected by arrows">
+          <canvas id="protocol-diagram" role="img" aria-label="Interactive protocol stack visualization"></canvas>
+        </div>
+
         <div class="stack-grid">
           <div class="stack-card fade-in">
             <div class="stack-icon">
@@ -235,6 +242,34 @@ const result = await marcFetch(
       </div>
     </section>
 
+    <!-- Try It Playground (issue #305) -->
+    <section class="section try-it-section" id="try-it">
+      <div class="container">
+        <div class="guide-header">
+          <span class="eyebrow">Playground</span>
+          <h2 class="section-title">Try It <span class="accent">in the browser.</span></h2>
+          <p class="section-desc">Explore the marc-stellar-sdk directly — no install required. The playground runs entirely in your browser via StackBlitz.</p>
+        </div>
+        <div class="playground-wrap fade-in">
+          <div class="playground-notice">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            The sandbox runs against Stellar Testnet. No real funds are used.
+          </div>
+          <div id="stackblitz-embed" class="playground-embed" role="region" aria-label="SDK playground">
+            <div class="playground-placeholder">
+              <div class="playground-icon" aria-hidden="true">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </div>
+              <p class="playground-placeholder-text">An interactive Node.js environment with <code>marc-stellar-sdk</code> pre-installed will load below.</p>
+              <button id="load-playground" class="btn btn-primary" data-umami-event="cta-playground" data-umami-event-location="try-it">
+                Launch Playground
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Deployed Contracts -->
     <section class="section contracts-section" id="contracts">
       <div class="container contracts-container">
@@ -248,7 +283,7 @@ const result = await marcFetch(
           </div>
         </div>
         <div class="contracts-grid">
-          <div class="contract-card fade-in">
+          <div class="contract-card fade-in" data-contract="agent_identity">
             <div class="contract-card-header">
               <div class="contract-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -263,7 +298,7 @@ const result = await marcFetch(
             </button>
             <a href="https://stellar.expert/explorer/testnet/contract/CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5" target="_blank" rel="noopener" class="contract-explorer">View on Explorer →</a>
           </div>
-          <div class="contract-card fade-in">
+          <div class="contract-card fade-in" data-contract="agentic_commerce">
             <div class="contract-card-header">
               <div class="contract-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><line x1="6" y1="11" x2="6" y2="11"/><line x1="18" y1="11" x2="18" y2="11"/></svg>

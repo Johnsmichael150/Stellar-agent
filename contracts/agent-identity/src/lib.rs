@@ -191,9 +191,20 @@ impl AgentIdentityContract {
             panic!("not agent owner");
         }
         env.storage().persistent().remove(&DataKey::Agent(id));
-        env.storage()
+        // Only remove the OwnerToId mapping if it still points to this agent.
+        // If the owner has since re-registered (getting a new agent id), the
+        // mapping now points to the newer agent and must NOT be wiped. This
+        // prevents a stale or replayed deregister call from corrupting the
+        // registry. (Fixes issue #321.)
+        let current_id: Option<u64> = env
+            .storage()
             .persistent()
-            .remove(&DataKey::OwnerToId(agent.owner.clone()));
+            .get(&DataKey::OwnerToId(agent.owner.clone()));
+        if current_id == Some(id) {
+            env.storage()
+                .persistent()
+                .remove(&DataKey::OwnerToId(agent.owner.clone()));
+        }
 
         let count: u32 = env
             .storage()

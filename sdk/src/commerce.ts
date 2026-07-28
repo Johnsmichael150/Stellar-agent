@@ -18,6 +18,15 @@ export const u32ToScVal  = (v: number) => nativeToScVal(v, { type: "u32" });
 export const strToScVal  = (v: string) => nativeToScVal(v, { type: "string" });
 export const addrToScVal = (v: string) => new Address(v).toScVal();
 
+// --- ScVal decoding helpers ---
+
+export const i128FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u128FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u64FromScVal  = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u32FromScVal  = (v: xdr.ScVal): number => Number(scValToNative(v));
+export const strFromScVal  = (v: xdr.ScVal): string => scValToNative(v) as string;
+export const addrFromScVal = (v: xdr.ScVal): string => Address.fromScVal(v).toString();
+
 /**
  * Typed wrapper around the `agentic_commerce` Soroban contract.
  *

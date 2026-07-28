@@ -1,9 +1,11 @@
 {
   "version": 2,
   "builds": [
-    { "src": "index.html", "use": "@vercel/static" }
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "api/contract-addresses.js", "use": "@vercel/node" }
   ],
   "routes": [
+    { "src": "/api/contract-addresses", "dest": "/api/contract-addresses.js" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }

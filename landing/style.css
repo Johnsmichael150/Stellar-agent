@@ -445,8 +445,94 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   display: block;
 }
 
+/* ── Animated Protocol Diagram (issue #303) ── */
+.diagram-wrap {
+  width: 100%;
+  margin: 0 auto 48px;
+  max-width: 680px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 24px 16px;
+}
+#protocol-diagram {
+  display: block;
+  width: 100%;
+}
+
+/* ── Try It Playground (issue #305) ── */
+.try-it-section {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+}
+.playground-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+.playground-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+.playground-embed {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  min-height: 500px;
+  background: #0F0F0F;
+  display: flex;
+  flex-direction: column;
+}
+.playground-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 48px 24px;
+  text-align: center;
+}
+.playground-icon {
+  width: 72px; height: 72px;
+  border-radius: var(--radius-xl);
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.playground-placeholder-text {
+  font-size: 15px;
+  color: #9CA3AF;
+  max-width: 380px;
+  line-height: 1.6;
+}
+.playground-placeholder-text code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: var(--accent);
+  background: rgba(249, 115, 22, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.playground-iframe {
+  width: 100%;
+  height: 540px;
+  border: none;
+  display: block;
+}
+
 /* ── Contracts ── */
-.contracts-section {
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
 }
@@ -684,4 +770,6 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   .hero-ctas .btn { justify-content: center; text-align: center; }
   .contract-card { padding: 20px; }
   .contract-addr { padding: 10px 12px; }
+  .playground-iframe { height: 420px; }
+  .diagram-wrap { padding: 16px 8px; }
 }

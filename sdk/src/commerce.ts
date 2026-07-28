@@ -9,6 +9,8 @@ import {
 import type { Job, JobStatus, MarcConfig } from "./types.js";
 import { BaseClient } from "./baseClient.js";
 
+const MAX_I128 = (1n << 127n) - 1n;
+
 // --- ScVal helpers (exported for custom contract interactions) ---
 
 export const i128ToScVal = (v: bigint) => nativeToScVal(v, { type: "i128" });
@@ -17,6 +19,15 @@ export const u64ToScVal  = (v: bigint) => nativeToScVal(v, { type: "u64" });
 export const u32ToScVal  = (v: number) => nativeToScVal(v, { type: "u32" });
 export const strToScVal  = (v: string) => nativeToScVal(v, { type: "string" });
 export const addrToScVal = (v: string) => new Address(v).toScVal();
+
+// --- ScVal decoding helpers ---
+
+export const i128FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u128FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u64FromScVal  = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u32FromScVal  = (v: xdr.ScVal): number => Number(scValToNative(v));
+export const strFromScVal  = (v: xdr.ScVal): string => scValToNative(v) as string;
+export const addrFromScVal = (v: xdr.ScVal): string => Address.fromScVal(v).toString();
 
 /**
  * Typed wrapper around the `agentic_commerce` Soroban contract.
@@ -47,9 +58,8 @@ export class CommerceClient extends BaseClient {
     budget: bigint,
     description: string,
   ): Promise<bigint> {
-    if (budget <= 0n) {
-      throw new Error("budget must be greater than 0");
-    }
+    if (budget <= 0n) throw new Error("budget must be greater than 0");
+    if (budget > MAX_I128) throw new Error("budget exceeds i128 max");
 
     const op = this.contract.call(
       "create_job",
@@ -110,15 +120,18 @@ export class CommerceClient extends BaseClient {
     await this.invoke(client, op, () => undefined, "commerce");
   }
 
-  /** Read a job by ID. Returns null if not found. */
+  /**
+   * Read a job by ID.
+   * Returns `null` only when the contract confirms the job does not exist.
+   * Throws on RPC/network errors so callers can distinguish not-found from outage.
+   */
   async getJob(jobId: bigint): Promise<Job | null> {
     const op = this.contract.call(
       "get_job",
       nativeToScVal(jobId, { type: "u64" }),
     );
-    return await this.simulate(op, (v) => {
+    return await this.simulateOption(op, (v) => {
       const native = scValToNative(v);
-      if (!native) return null;
       return {
         id: BigInt(native.id),
         client: native.client,

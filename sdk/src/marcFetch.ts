@@ -116,13 +116,18 @@ export function marcFetch(opts: MarcFetchOptions) {
 
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     let attempts = 0;
+    let paymentTriggered = false;
     while (attempts < maxPaymentAttempts) {
       attempts += 1;
       try {
         const response = await baseFetch(input, init);
         if (response.status !== 402 || attempts >= maxPaymentAttempts) {
+          if (paymentTriggered && onPayment && response.ok) {
+            onPayment("settled");
+          }
           return response;
         }
+        paymentTriggered = true;
       } catch (err) {
         if (timeoutMs && err instanceof DOMException && err.name === "AbortError") {
           throw new Error(`timeout after ${timeoutMs}ms`);

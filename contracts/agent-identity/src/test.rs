@@ -550,3 +550,4 @@ fn get_agent_missing_does_not_bump_ttl() {
     // id 99 was never registered.
     assert_eq!(client.get_agent(&99u64), None);
 }
+}

@@ -6,6 +6,13 @@ use soroban_sdk::{
 
 const MAX_METADATA_URI_LEN: u32 = 256; // prevents storage-griefing via oversized URI (#320)
 
+// Soroban rent constants (#322).
+// LEDGER_BUMP  — target TTL after every write/read (~30 days at ~5 s/ledger).
+// LEDGER_THRESHOLD — minimum TTL before we bother bumping on a read (1 ledger
+//                    means "always bump", keeping read-path behaviour simple).
+const LEDGER_BUMP: u32 = 518_400; // 30 * 24 * 3_600 / 5
+const LEDGER_THRESHOLD: u32 = 1;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -112,7 +119,13 @@ impl AgentIdentityContract {
         env.storage().persistent().set(&DataKey::Agent(next), &agent);
         env.storage()
             .persistent()
+            .extend_ttl(&DataKey::Agent(next), LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .persistent()
             .set(&DataKey::OwnerToId(owner.clone()), &next);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::OwnerToId(owner.clone()), LEDGER_THRESHOLD, LEDGER_BUMP);
         env.storage()
             .instance()
             .set(&DataKey::NextId, &next.checked_add(1).expect("agent id overflow"));
@@ -154,6 +167,9 @@ impl AgentIdentityContract {
         }
         agent.uri = new_uri;
         env.storage().persistent().set(&DataKey::Agent(id), &agent);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Agent(id), LEDGER_THRESHOLD, LEDGER_BUMP);
 
         UriUpdated {
             owner: caller,
@@ -208,12 +224,26 @@ impl AgentIdentityContract {
 
     /// Fetch an agent by id.
     pub fn get_agent(env: Env, id: u64) -> Option<Agent> {
-        env.storage().persistent().get(&DataKey::Agent(id))
+        let key = DataKey::Agent(id);
+        let result: Option<Agent> = env.storage().persistent().get(&key);
+        if result.is_some() {
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        }
+        result
     }
 
     /// Look up the agent id owned by `owner`, if any.
     pub fn agent_of(env: Env, owner: Address) -> Option<u64> {
-        env.storage().persistent().get(&DataKey::OwnerToId(owner))
+        let key = DataKey::OwnerToId(owner);
+        let result: Option<u64> = env.storage().persistent().get(&key);
+        if result.is_some() {
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        }
+        result
     }
 
     /// Transfer ownership of an agent to `new_owner`. Requires auth from both
@@ -244,10 +274,16 @@ impl AgentIdentityContract {
         env.storage()
             .persistent()
             .set(&DataKey::OwnerToId(new_owner.clone()), &id);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::OwnerToId(new_owner.clone()), LEDGER_THRESHOLD, LEDGER_BUMP);
 
         let old_owner = agent.owner.clone();
         agent.owner = new_owner.clone();
         env.storage().persistent().set(&DataKey::Agent(id), &agent);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Agent(id), LEDGER_THRESHOLD, LEDGER_BUMP);
 
         OwnerTransferred {
             old_owner,

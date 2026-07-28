@@ -60,23 +60,36 @@ fn init_sets_admin_and_treasury() {
 }
 
 #[test]
-fn init_allows_reinit_by_same_admin() {
+#[should_panic(expected = "already initialized")]
+fn init_panics_on_double_init() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, treasury) = setup(&env);
-    // Re-initialization by the same admin should succeed (for updating treasury/fee params)
+    // Second init() call should panic
     client.init(&admin, &treasury);
 }
 
 #[test]
+fn re_init_updates_admin_and_treasury() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+    let new_admin = Address::generate(&env);
+    let new_treasury = Address::generate(&env);
+    client.re_init(&admin, &new_admin, &new_treasury);
+    // Verify new admin can call admin-only functions
+    let newest_treasury = Address::generate(&env);
+    client.set_treasury(&new_admin, &newest_treasury);
+}
+
+#[test]
 #[should_panic(expected = "not admin")]
-fn init_rejects_reinit_by_different_admin() {
+fn re_init_rejects_non_admin() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, _admin, treasury) = setup(&env);
-    let different_admin = Address::generate(&env);
-    // Re-initialization by a different admin should panic
-    client.init(&different_admin, &treasury);
+    let mallory = Address::generate(&env);
+    client.re_init(&mallory, &mallory, &treasury);
 }
 
 #[test]
@@ -362,4 +375,84 @@ fn create_job_rejects_call_before_init() {
         &100_000i128,
         &String::from_str(&env, "job before init"),
     );
+}
+
+// ---------------------------------------------------------------------------
+// Issue #323 — party validation tests
+// ---------------------------------------------------------------------------
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn create_job_rejects_client_as_provider() {
+    // client == provider → SelfEscrow (error code 1)
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let evaluator = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    // buyer is both client and provider — must be rejected.
+    client.create_job(
+        &buyer,
+        &buyer,
+        &evaluator,
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "self-escrow attempt"),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn create_job_rejects_provider_as_evaluator() {
+    // provider == evaluator → InvalidParties (error code 2)
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    // seller is both provider and evaluator — must be rejected.
+    client.create_job(
+        &buyer,
+        &seller,
+        &seller,
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "provider-as-evaluator attempt"),
+    );
+}
+
+#[test]
+fn create_job_allows_client_as_evaluator() {
+    // client == evaluator is explicitly permitted — this is the common pattern
+    // used throughout the existing test suite (buyer self-approves).
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    let job_id = client.create_job(
+        &buyer,
+        &seller,
+        &buyer, // client == evaluator — allowed
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "buyer self-evaluates"),
+    );
+
+    let job = client.get_job(&job_id).unwrap();
+    assert_eq!(job.client, buyer);
+    assert_eq!(job.evaluator, buyer);
+    assert_eq!(job.status, JobStatus::Funded);
 }

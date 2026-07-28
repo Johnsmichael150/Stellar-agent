@@ -47,7 +47,9 @@ async function generate(task: string, depth: ResearchDepth = "standard"): Promis
   ]
 }
 
-Topic: ${task}
+Research depth: ${depth}
+${summaryGuidance}
+Include ${sources} sources. Each source must have a real, verifiable URL. The summary should cite sources by their index [1], [2], etc.
 
 Each source must have a real, verifiable URL. Include ${sourceRange} sources. ${detail} The summary should cite sources by their index [1], [2], etc.`,
       },
@@ -66,18 +68,30 @@ const limiter = rateLimit({
 });
 
 app.post("/job", limiter, async (req, res) => {
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { jobId, task, depth } = req.body;
+
+  console.log(`[${AGENT_ID}] [req:${requestId}] Incoming POST /job — headers: ${JSON.stringify({
+    "content-type": req.headers["content-type"],
+    "user-agent": req.headers["user-agent"],
+    "x-forwarded-for": req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
+  })} — body: ${JSON.stringify(req.body)}`);
+
   if (!jobId || isNaN(Number(jobId))) {
+    console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: invalid jobId`);
     res.status(400).json({ error: "invalid jobId" });
     return;
   }
   if (!task) {
+    console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: missing task`);
     res.status(400).json({ error: "missing task" });
     return;
   }
   const resolvedDepth: ResearchDepth = ["brief", "standard", "deep"].includes(depth) ? depth : "standard";
   console.log(`[${AGENT_ID}] Job #${jobId} (depth=${resolvedDepth}): ${task}`);
-  res.json({ status: "accepted", jobId, depth: resolvedDepth });
+  const response = { status: "accepted", jobId, depth: resolvedDepth };
+  console.log(`[${AGENT_ID}] [req:${requestId}] Response: ${JSON.stringify(response)}`);
+  res.json(response);
 
   try {
     console.log(`[${AGENT_ID}] Calling Groq...`);

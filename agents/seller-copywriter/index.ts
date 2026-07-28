@@ -40,16 +40,30 @@ const limiter = rateLimit({
 });
 
 app.post("/job", limiter, async (req, res) => {
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { jobId, task, tone, audience, keywords } = req.body;
+
+  console.log(`[${AGENT_ID}] [req:${requestId}] Incoming POST /job — headers: ${JSON.stringify({
+    "content-type": req.headers["content-type"],
+    "user-agent": req.headers["user-agent"],
+    "x-forwarded-for": req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
+  })} — body: ${JSON.stringify(req.body)}`);
+
   if (!jobId || isNaN(Number(jobId))) {
+    console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: invalid jobId`);
     res.status(400).json({ error: "invalid jobId" });
     return;
   }
   if (!task) {
+    console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: missing task`);
     res.status(400).json({ error: "missing task" });
     return;
   }
-  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}`);
+  if (brandVoice !== undefined && (typeof brandVoice !== "object" || Array.isArray(brandVoice))) {
+    res.status(400).json({ error: "brandVoice must be an object" });
+    return;
+  }
+  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}${brandVoice ? ` | brandVoice: ${JSON.stringify(brandVoice)}` : ""}`);
   res.json({ status: "accepted", jobId });
 
   try {

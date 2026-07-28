@@ -23,6 +23,10 @@ pub struct Job {
     pub evaluator: Address,
     pub token: Address,
     pub budget: i128,
+    /// Cumulative amount already paid out from the escrow (e.g. partial
+    /// settlements if the state machine is extended in a future version).
+    /// `cancel()` refunds `budget - released` so it never over-refunds.
+    pub released: i128,
     pub status: JobStatus,
     pub description: String,
     pub deliverable: String,
@@ -191,6 +195,7 @@ impl AgenticCommerceContract {
             evaluator,
             token,
             budget,
+            released: 0,
             status: JobStatus::Funded,
             description,
             deliverable: String::from_str(&env, ""),
@@ -261,6 +266,7 @@ impl AgenticCommerceContract {
         let payout: i128 = job.budget - fee;
 
         job.status = JobStatus::Completed;
+        job.released = job.budget; // full budget has been paid out
         job.updated_at = env.ledger().timestamp();
         env.storage().persistent().set(&DataKey::Job(id), &job);
 
@@ -282,7 +288,9 @@ impl AgenticCommerceContract {
         .publish(&env);
     }
 
-    /// Client cancels a funded (not-yet-submitted) job and reclaims the full budget.
+    /// Client cancels a funded (not-yet-submitted) job and reclaims the unreleased budget.
+    /// Refunds `budget - released` so it correctly handles any future partial-settlement
+    /// extensions without over-refunding.
     pub fn cancel(env: Env, caller: Address, id: u64) {
         caller.require_auth();
         let mut job: Job = env
@@ -296,9 +304,15 @@ impl AgenticCommerceContract {
         if job.status != JobStatus::Funded {
             panic!("invalid status");
         }
-        let token_client = token::TokenClient::new(&env, &job.token);
-        let contract_addr = env.current_contract_address();
-        token_client.transfer(&contract_addr, &job.client, &job.budget);
+        // Refund only the net (unreleased) portion of the budget so the
+        // contract never transfers more than it actually holds for this job.
+        let net_budget = job.budget - job.released;
+        if net_budget > 0 {
+            let token_client = token::TokenClient::new(&env, &job.token);
+            let contract_addr = env.current_contract_address();
+            token_client.transfer(&contract_addr, &job.client, &net_budget);
+        }
+        job.released = job.budget; // mark everything as settled
         job.status = JobStatus::Cancelled;
         job.updated_at = env.ledger().timestamp();
         env.storage().persistent().set(&DataKey::Job(id), &job);
@@ -387,9 +401,14 @@ impl AgenticCommerceContract {
         if now < job.funded_at + REFUND_TIMEOUT_SECS {
             panic!("timeout not reached");
         }
-        let token_client = token::TokenClient::new(&env, &job.token);
-        let contract_addr = env.current_contract_address();
-        token_client.transfer(&contract_addr, &job.client, &job.budget);
+        // Refund only the net (unreleased) portion to avoid over-transfer.
+        let net_budget = job.budget - job.released;
+        if net_budget > 0 {
+            let token_client = token::TokenClient::new(&env, &job.token);
+            let contract_addr = env.current_contract_address();
+            token_client.transfer(&contract_addr, &job.client, &net_budget);
+        }
+        job.released = job.budget;
         job.status = JobStatus::Cancelled;
         job.updated_at = now;
         env.storage().persistent().set(&DataKey::Job(id), &job);

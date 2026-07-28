@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Mutation testing for agentic-commerce contract using cargo-mutants.
+# Verifies that tests catch real bugs by introducing controlled mutations (#319).
 # Install: cargo install cargo-mutants
 # Usage: ./mutation-test.sh [--in-place]
 set -euo pipefail

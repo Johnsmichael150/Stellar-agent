@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import express from "express";
 import { Keypair } from "@stellar/stellar-sdk";
 import { IdentityClient, TESTNET, type MarcConfig } from "marc-stellar-sdk";
@@ -53,7 +54,29 @@ export async function createSellerAgent(options: {
   });
 
   app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync(path.join(options.agentDir, "agent.json"), "utf8"))));
-  app.get("/health", (_req, res) => res.json({ status: "ok", agentId: options.id, uptime: process.uptime() }));
+
+  /**
+   * GET /health — liveness probe for monitoring and the agent registry.
+   *
+   * Returns a 200 with a JSON body so the registry (and any external
+   * health-check tool) can distinguish "healthy and idle" from "crashed".
+   *
+   * Response fields:
+   *   status      — always "ok" when the process is running
+   *   agentId     — human-readable seller ID (e.g. "seller-webbuilder")
+   *   onChainId   — numeric on-chain agent ID assigned at registration
+   *   uptime      — process uptime in seconds
+   *   timestamp   — ISO-8601 UTC timestamp of this response
+   */
+  app.get("/health", (_req, res) =>
+    res.json({
+      status: "ok",
+      agentId: options.id,
+      onChainId: agentId !== null ? agentId!.toString() : null,
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    }),
+  );
 
   return { app, seller, agentId: agentId, cfg };
 }

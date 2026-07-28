@@ -93,19 +93,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ── Smooth scroll for nav links ──
-  const NAV_HEIGHT = 72;
-  document.querySelectorAll('a[href^="#"]').forEach((link) => {
-    link.addEventListener("click", (e) => {
-      const target = document.querySelector(link.getAttribute("href"));
-      if (target) {
-        e.preventDefault();
-        const top = target.getBoundingClientRect().top + window.scrollY - NAV_HEIGHT;
-        window.scrollTo({ top, behavior: "smooth" });
-      }
-    });
-  });
-
   // ── Mobile hamburger toggle ──
   const hamburger = document.getElementById("hamburger");
   const navLinksContainer = document.getElementById("nav-links");

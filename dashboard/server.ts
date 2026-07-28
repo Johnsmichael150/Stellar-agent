@@ -811,7 +811,7 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
 
 app.use(errorHandler);
 
-const PORT = Number(process.env.DASHBOARD_PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? process.env.DASHBOARD_PORT ?? 3000);
 app.listen(PORT, () => {
   console.log(`Bear Dashboard → http://localhost:${PORT}`);
   console.log(`  Buyer:  ${buyerKeypair.publicKey()}`);

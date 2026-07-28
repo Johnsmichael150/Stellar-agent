@@ -203,10 +203,33 @@ function resolveDeploymentValues(network: "testnet" | "mainnet") {
   }
 }
 
-function getEnvRpcUrl(defaultRpcUrl: string) {
-  return (typeof process !== "undefined" && process.env["STELLAR_RPC_URL"])
-    ? process.env["STELLAR_RPC_URL"]
-    : defaultRpcUrl;
+/**
+ * Resolve the Soroban RPC URL for a given network.
+ *
+ * Lookup order (first match wins):
+ *   1. `STELLAR_TESTNET_RPC_URL` / `STELLAR_MAINNET_RPC_URL` — network-specific override
+ *   2. `STELLAR_RPC_URL` — generic override (applies to whichever network is active)
+ *   3. `defaultRpcUrl` — hard-coded fallback (e.g. public SDF endpoint)
+ *
+ * This lets callers point the SDK at a local testnet (e.g. Docker), a
+ * custom RPC provider, or any other endpoint without touching source code.
+ *
+ * @param network      - `"testnet"` or `"mainnet"`, used to pick the
+ *                       network-specific env var first.
+ * @param defaultRpcUrl - The built-in fallback URL for this network.
+ *
+ * @example
+ * // .env
+ * STELLAR_RPC_URL=http://localhost:8000/soroban/rpc
+ *
+ * @example
+ * // .env — per-network override (takes priority over STELLAR_RPC_URL)
+ * STELLAR_TESTNET_RPC_URL=https://my-rpc-provider.example.com
+ */
+export function getEnvRpcUrl(network: "testnet" | "mainnet", defaultRpcUrl: string): string {
+  if (typeof process === "undefined") return defaultRpcUrl;
+  const networkKey = network === "testnet" ? "STELLAR_TESTNET_RPC_URL" : "STELLAR_MAINNET_RPC_URL";
+  return process.env[networkKey] ?? process.env["STELLAR_RPC_URL"] ?? defaultRpcUrl;
 }
 
 /**
@@ -214,22 +237,28 @@ function getEnvRpcUrl(defaultRpcUrl: string) {
  *
  * Defaults to the latest deployed testnet addresses when available, while still
  * allowing environment overrides for custom RPC endpoints or deployment paths.
+ *
+ * RPC URL resolution order:
+ *   `STELLAR_TESTNET_RPC_URL` → `STELLAR_RPC_URL` → `https://soroban-testnet.stellar.org`
  */
 export const TESTNET: PresetConfig = {
   network: "stellar-testnet",
   networkPassphrase: "Test SDF Network ; September 2015",
-  rpcUrl: getEnvRpcUrl("https://soroban-testnet.stellar.org"),
+  rpcUrl: getEnvRpcUrl("testnet", "https://soroban-testnet.stellar.org"),
   ...resolveDeploymentValues("testnet"),
   deployer: "GA5VIZYCUM3IUZZNQTTB7YSLJSE5WZ2EI5EGWNLTWQ234SLSH45MPKX3" as Address,
 };
 
 /**
  * Preset configuration for Stellar mainnet.
+ *
+ * RPC URL resolution order:
+ *   `STELLAR_MAINNET_RPC_URL` → `STELLAR_RPC_URL` → `https://soroban-rpc.mainnet.stellar.org`
  */
 export const MAINNET: PresetConfig = {
   network: "stellar-mainnet",
   networkPassphrase: "Public Global Stellar Network ; September 2015",
-  rpcUrl: getEnvRpcUrl("https://soroban-rpc.mainnet.stellar.org"),
+  rpcUrl: getEnvRpcUrl("mainnet", "https://soroban-rpc.mainnet.stellar.org"),
   ...resolveDeploymentValues("mainnet"),
 };
 

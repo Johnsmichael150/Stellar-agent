@@ -5,6 +5,7 @@
  *
  * GET    /agents              → list alive agents (heartbeating)
  * GET    /agents?include_inactive=true → list all agents including deregistered
+ * GET    /agents?tags=webdev,copywriting → filter alive agents by capability tags
  * GET    /agents/:id     → get a specific agent manifest
  * DELETE /agents/:id     → manually deregister an agent
  * POST   /heartbeat      → agent pings with { agentId }
@@ -30,6 +31,8 @@ const agentListRequestCounts = new Map<string, { count: number; resetAt: number 
 type AgentEntry = {
   lastHeartbeat: number;
   manifest: Record<string, unknown>;
+  /** Capability tags extracted from the manifest and normalised to lowercase. */
+  tags: string[];
 };
 
 const activeAgents = new Map<string, AgentEntry>();
@@ -47,7 +50,35 @@ function validateManifest(m: unknown): string | null {
   }
   if (typeof obj.price_usdc !== "number" || obj.price_usdc <= 0) return 'field "price_usdc" must be a positive number';
   if (typeof obj.wallet !== "string" || !(obj.wallet as string).trim()) return 'field "wallet" must be a non-empty string';
+  // `tags` is optional but must be an array of strings when present
+  if (obj.tags !== undefined) {
+    if (!Array.isArray(obj.tags) || obj.tags.some((t) => typeof t !== "string")) {
+      return 'field "tags" must be an array of strings';
+    }
+  }
   return null;
+}
+
+/**
+ * Extract and normalise capability tags from a manifest.
+ *
+ * Tags are sourced from:
+ *   1. `manifest.tags`  — explicit capability tags (e.g. ["webdev", "html"])
+ *   2. `manifest.tasks` — task descriptions used as implicit tags when no
+ *                         explicit tags are provided
+ *
+ * All values are lower-cased and de-duplicated so tag queries are
+ * case-insensitive.
+ */
+function extractTags(manifest: Record<string, unknown>): string[] {
+  if (Array.isArray(manifest.tags) && manifest.tags.length > 0) {
+    return [...new Set((manifest.tags as string[]).map((t) => t.toLowerCase().trim()).filter(Boolean))];
+  }
+  // Fall back to tasks as implicit tags
+  if (Array.isArray(manifest.tasks)) {
+    return [...new Set((manifest.tasks as string[]).map((t) => t.toLowerCase().trim()).filter(Boolean))];
+  }
+  return [];
 }
 
 const app = express();
@@ -130,7 +161,7 @@ function getAliveAgents(): Record<string, unknown>[] {
   const alive: Record<string, unknown>[] = [];
   for (const entry of activeAgents.values()) {
     if (now - entry.lastHeartbeat < HEARTBEAT_TIMEOUT_MS) {
-      alive.push({ ...entry.manifest, alive: true });
+      alive.push({ ...entry.manifest, tags: entry.tags, alive: true });
     }
   }
   return alive;
@@ -142,7 +173,8 @@ function getAllAgentsWithStatus(): Record<string, unknown>[] {
     const id = (m as Record<string, unknown>).id as string | undefined;
     const entry = id ? activeAgents.get(id) : undefined;
     const alive = entry !== undefined && now - entry.lastHeartbeat < HEARTBEAT_TIMEOUT_MS;
-    return { ...m, alive };
+    const tags = entry ? entry.tags : extractTags(m as Record<string, unknown>);
+    return { ...m, tags, alive };
   });
 }
 
@@ -181,8 +213,8 @@ app.post("/heartbeat", requireRegistryAuth, (req, res) => {
     return res.status(422).json({ error: `invalid manifest: ${schemaError}` });
   }
 
-  activeAgents.set(agentId, { lastHeartbeat: Date.now(), manifest });
-  res.json({ status: "ok", agentId });
+  activeAgents.set(agentId, { lastHeartbeat: Date.now(), manifest, tags: extractTags(manifest) });
+  res.json({ status: "ok", agentId, tags: extractTags(manifest) });
 });
 
 function filterByTags(agents: Record<string, unknown>[], rawTags: string): Record<string, unknown>[] {

@@ -59,10 +59,12 @@ app.post("/job", limiter, async (req, res) => {
     res.status(400).json({ error: "missing task" });
     return;
   }
-  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}`);
-  const response = { status: "accepted", jobId };
-  console.log(`[${AGENT_ID}] [req:${requestId}] Response: ${JSON.stringify(response)}`);
-  res.json(response);
+  if (brandVoice !== undefined && (typeof brandVoice !== "object" || Array.isArray(brandVoice))) {
+    res.status(400).json({ error: "brandVoice must be an object" });
+    return;
+  }
+  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}${brandVoice ? ` | brandVoice: ${JSON.stringify(brandVoice)}` : ""}`);
+  res.json({ status: "accepted", jobId });
 
   try {
     console.log(`[${AGENT_ID}] Calling Groq...`);

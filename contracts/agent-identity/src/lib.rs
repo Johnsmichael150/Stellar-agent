@@ -4,7 +4,7 @@ use soroban_sdk::{
     Env, String, Vec,
 };
 
-const MAX_METADATA_URI_LEN: u32 = 256;
+const MAX_METADATA_URI_LEN: u32 = 256; // prevents storage-griefing via oversized URI (#320)
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

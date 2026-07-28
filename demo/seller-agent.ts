@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { Keypair } from "@stellar/stellar-sdk";
 import { IdentityClient, CommerceClient, marcPaywall, TESTNET, type MarcConfig } from "marc-stellar-sdk";
 
@@ -12,7 +13,12 @@ const cfg: MarcConfig = {
 };
 
 const seller = Keypair.fromSecret(process.env.SELLER_SECRET!);
-const jobId = Number(process.env.JOB_ID!);
+
+const jobIdRaw = process.env.JOB_ID;
+if (jobIdRaw !== undefined && !/^\d+$/.test(jobIdRaw)) {
+  throw new Error(`JOB_ID must be a non-negative integer, got: "${jobIdRaw}"`);
+}
+const jobId = jobIdRaw !== undefined ? BigInt(jobIdRaw) : undefined;
 
 /**
  * Service price for the x402 paywall.
@@ -39,11 +45,13 @@ if (!agentId) {
 
 // Step 2: Start x402 paywalled API
 const app = express();
+app.use(cors());
 
 app.use("/api/work", marcPaywall({
   payTo: seller.publicKey(),
   price: servicePrice,           // ← driven by env var, not hardcoded
   network: "stellar:testnet",
+  token: cfg.usdcToken,
   description: "One MARC-protected API call",
   facilitatorUrl: process.env.FACILITATOR_URL ?? process.env.X402_FACILITATOR_URL,
   facilitatorApiKey: process.env.FACILITATOR_API_KEY ?? process.env.X402_FACILITATOR_API_KEY,
@@ -60,7 +68,7 @@ app.listen(port, () => console.log(`[2] Paywall API listening on :${port}`));
 // Step 3: Submit deliverable once JOB_ID is set
 if (jobId) {
   const commerce = new CommerceClient(cfg);
-  await commerce.submit(seller, jobId, "ipfs://work-results.json");
+  await commerce.submit(seller, BigInt(jobId), "ipfs://work-results.json");
   console.log(`[3] Deliverable submitted for job ${jobId}`);
   console.log(`    Awaiting evaluator approval…\n`);
   console.log(`=== SELLER DONE ===\n`);

@@ -1,83 +1,35 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import express from "express";
+import { fileURLToPath } from "node:url";
 import rateLimit from "express-rate-limit";
 import Groq from "groq-sdk";
-import { Keypair } from "@stellar/stellar-sdk";
-import { IdentityClient, CommerceClient, TESTNET, type MarcConfig } from "marc-stellar-sdk";
-import { retryWithBackoff } from "../shared.js";
+import { CommerceClient } from "marc-stellar-sdk";
+import { createSellerAgent } from "../shared.js";
 
-const cfg: MarcConfig = {
-  rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,
-  networkPassphrase: process.env.STELLAR_NETWORK_PASSPHRASE ?? TESTNET.networkPassphrase,
-  identityContract: process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
-  commerceContract: process.env.AGENTIC_COMMERCE_CONTRACT || TESTNET.commerceContract,
-  usdcToken: process.env.USDC_TOKEN_CONTRACT || TESTNET.usdcToken,
-  onTx: (hash) => console.log(`[tx] ${hash} → https://stellar.expert/explorer/testnet/tx/${hash}`),
-};
-
-const seller = Keypair.fromSecret(process.env.SELLER_SECRET!);
-const port = Number(process.env.SELLER_PORT ?? 4502);
-const publicUrl = (process.env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/+$/, "");
+const AGENT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.SELLER_PORT ?? 4502);
 const AGENT_ID = "seller-copywriter";
-const OUTPUT_DIR = "output";
+const OUTPUT_DIR = path.join(AGENT_DIR, "output");
+const OUTPUT_URL = "output";
+const publicUrl = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, "");
+
+const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 let callCount = 0;
-
 async function generate(prompt: string): Promise<string> {
   callCount++;
   const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: GROQ_MODEL,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.9,
     seed: callCount + Date.now(),
   });
   return res.choices[0].message.content ?? "";
 }
-
-const identity = new IdentityClient(cfg);
-let agentId: bigint | null = null;
-try {
-  await retryWithBackoff(
-    async () => { agentId = await identity.agentOf(seller.publicKey()); },
-    { maxAttempts: 6, baseDelayMs: 2000, label: AGENT_ID },
-  );
-} catch (err) {
-  console.error(`[${AGENT_ID}] Fatal: identity RPC unreachable —`, (err as Error).message);
-  process.exit(1);
-}
-if (!agentId) {
-  await retryWithBackoff(
-    async () => { agentId = await identity.register(seller, `ipfs://${AGENT_ID}.json`); },
-    { maxAttempts: 4, baseDelayMs: 2000, label: AGENT_ID },
-  );
-  console.log(`[${AGENT_ID}] Registered as agent #${agentId}`);
-} else {
-  console.log(`[${AGENT_ID}] Already agent #${agentId}`);
-}
-
-const registryUrl = (process.env.REGISTRY_URL ?? "http://localhost:4500").replace(/\/+$/, "");
-
-async function heartbeat() {
-  try {
-    const res = await fetch(`${registryUrl}/heartbeat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ agentId: AGENT_ID }),
-    });
-    if (!res.ok) {
-      console.warn(`[${AGENT_ID}] Heartbeat failed (${res.status})`);
-    }
-  } catch {
-    console.warn(`[${AGENT_ID}] Registry unreachable at ${registryUrl}`);
-  }
-}
-
-setInterval(heartbeat, 60_000);
-heartbeat();
 
 const limiter = rateLimit({
   windowMs: 60_000,
@@ -87,44 +39,14 @@ const limiter = rateLimit({
   message: { error: "too many requests — rate limited (5/min/IP)" },
 });
 
-const app = express();
-app.use(express.json());
-
-app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync("agent.json", "utf8"))));
-
-app.use(`/${OUTPUT_DIR}`, express.static(OUTPUT_DIR));
-
-// Brand voice guidelines accepted alongside the task — closes #299
-interface BrandVoice {
-  tone?: string;
-  audience?: string;
-  keywords?: string[];
-  [key: string]: unknown;
-}
-
-function buildCopyPrompt(task: string, brandVoice?: BrandVoice): string {
-  const base = `You are a professional copywriter. Write compelling website copy for:\n\n${task}`;
-  if (!brandVoice) {
-    return `${base}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`;
-  }
-  const voiceLines: string[] = [];
-  if (brandVoice.tone) voiceLines.push(`Tone/voice: ${brandVoice.tone}`);
-  if (brandVoice.audience) voiceLines.push(`Target audience: ${brandVoice.audience}`);
-  if (brandVoice.keywords?.length) voiceLines.push(`Keywords to incorporate: ${brandVoice.keywords.join(", ")}`);
-  const extras = Object.entries(brandVoice)
-    .filter(([k]) => !["tone", "audience", "keywords"].includes(k))
-    .map(([k, v]) => `${k}: ${JSON.stringify(v)}`);
-  voiceLines.push(...extras);
-  const voiceBlock = voiceLines.length
-    ? `\n\nBrand voice guidelines:\n${voiceLines.map((l) => `- ${l}`).join("\n")}`
-    : "";
-  return `${base}${voiceBlock}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`;
-}
-
 app.post("/job", limiter, async (req, res) => {
-  const { jobId, task, brandVoice } = req.body as { jobId?: unknown; task?: string; brandVoice?: BrandVoice };
-  if (!jobId || !task) {
-    res.status(400).json({ error: "missing jobId or task" });
+  const { jobId, task, tone, audience, keywords } = req.body;
+  if (!jobId || isNaN(Number(jobId))) {
+    res.status(400).json({ error: "invalid jobId" });
+    return;
+  }
+  if (!task) {
+    res.status(400).json({ error: "missing task" });
     return;
   }
   if (brandVoice !== undefined && (typeof brandVoice !== "object" || Array.isArray(brandVoice))) {
@@ -136,7 +58,14 @@ app.post("/job", limiter, async (req, res) => {
 
   try {
     console.log(`[${AGENT_ID}] Calling Groq...`);
-    const copy = await generate(buildCopyPrompt(task, brandVoice));
+    const brandContext = [
+      tone ? `Tone: ${tone}` : "",
+      audience ? `Target audience: ${audience}` : "",
+      keywords?.length ? `Keywords to include: ${Array.isArray(keywords) ? keywords.join(", ") : keywords}` : "",
+    ].filter(Boolean).join("\n");
+    const copy = await generate(
+      `You are a professional copywriter. Write compelling website copy for:\n\n${task}${brandContext ? `\n\nBrand guidelines:\n${brandContext}` : ""}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`
+    );
     if (copy.length < 20) {
       throw new Error(`Generated copy too short (${copy.length} chars)`);
     }
@@ -144,7 +73,7 @@ app.post("/job", limiter, async (req, res) => {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     const filename = `job-${jobId}.md`;
     fs.writeFileSync(path.join(OUTPUT_DIR, filename), copy);
-    const deliverable = `${publicUrl}/${OUTPUT_DIR}/${filename}`;
+    const deliverable = `${publicUrl}/${OUTPUT_URL}/${filename}`;
     console.log(`[${AGENT_ID}] Copy written (${copy.length} chars) → ${deliverable}`);
 
     const commerce = new CommerceClient(cfg);
@@ -164,4 +93,4 @@ app.post("/job", limiter, async (req, res) => {
   }
 });
 
-app.listen(port, () => console.log(`[${AGENT_ID}] Listening on :${port}`));
+app.listen(PORT, () => console.log(`[${AGENT_ID}] Listening on :${PORT}`));

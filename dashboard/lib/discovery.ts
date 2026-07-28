@@ -111,7 +111,7 @@ export async function getVersion(force = false): Promise<number> {
   if (!force && versionCache.value !== null && Date.now() - versionCache.ts < CONTRACT_CACHE_TTL) {
     return versionCache.value as number;
   }
-  const v = await identity.version();
+  const v = await commerce.feeBps();
   versionCache = { value: v, ts: Date.now() };
   return v;
 }

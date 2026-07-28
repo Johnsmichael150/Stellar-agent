@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 // Shared types for the marc-stellar SDK.
 //
 // These mirror the on-chain structures of the two Soroban contracts
@@ -8,26 +11,31 @@
 // on the JS side to preserve precision.
 
 /**
- * A Stellar account or contract address in its StrKey form.
+ * A Stellar account or contract address in StrKey format.
  *
- * - Account addresses start with `G...`
- * - Contract addresses start with `C...`
+ * - Public account addresses start with `G` (e.g., `GXXXXXXXXXXXXXX...`)
+ * - Contract addresses start with `C` (e.g., `CXXXXXXXXXXXXXX...`)
  *
- * We intentionally leave this as a string alias rather than a branded type —
- * callers get one type to think about, and `@stellar/stellar-sdk`'s `Address`
- * class handles StrKey <-> ScVal conversion internally.
+ * This is a simple string alias (not a branded type) for usability.
+ * The `@stellar/stellar-sdk` `Address` class handles StrKey ↔ ScVal conversion.
+ *
+ * @example
+ * "GBUQWP3BOUZX34ULNQG23RQ6F4YUSXHTBVDJ42LPBK4EK4YLYL2QQ5K"
  */
 export type Address = string;
 
 /**
- * On-chain `Agent` record returned by `agent_identity.get_agent(id)`.
+ * On-chain agent record from the `agent_identity` contract.
  *
- * Matches the Rust struct:
- *   pub struct Agent { pub id: u64, pub owner: Address, pub uri: String }
+ * Represents a registered service agent with identity and metadata.
+ * Mirrors the Rust contract struct exactly.
  */
 export interface Agent {
+  /** The agent's unique on-chain identifier. */
   id: bigint;
+  /** The owner's Stellar address. */
   owner: Address;
+  /** Metadata URI (IPFS, HTTP, etc.). */
   uri: string;
 }
 
@@ -52,68 +60,182 @@ export enum JobStatus {
 }
 
 /**
- * On-chain `Job` record returned by `agentic_commerce.get_job(id)`.
+ * Reverse mapping from the raw numeric status returned by `getJob()` to the
+ * corresponding `JobStatus` string value.
  *
- * Matches the Rust struct 1:1. `budget` is `i128` on-chain so JS sees `bigint`.
+ * The Soroban contract stores `JobStatus` as a compact u32 enum on-chain.
+ * When `scValToNative` decodes it you get a number (0-5). Instead of writing:
+ *
+ * ```ts
+ * const label = Object.keys(JobStatus).find(k => (JobStatus as any)[k] === n);
+ * ```
+ *
+ * you can now do:
+ *
+ * ```ts
+ * const label: JobStatus = JobStatusFromNumber[n]; // e.g. JobStatus.Funded
+ * ```
+ *
+ * The index order matches the Rust enum declaration in `agentic-commerce/src/lib.rs`.
+ */
+export const JobStatusFromNumber: Record<number, JobStatus> = {
+  0: JobStatus.Open,
+  1: JobStatus.Funded,
+  2: JobStatus.Submitted,
+  3: JobStatus.Completed,
+  4: JobStatus.Rejected,
+  5: JobStatus.Cancelled,
+};
+
+/**
+ * On-chain job record from the `agentic_commerce` contract.
+ *
+ * Represents a complete work assignment with budget, lifecycle state, and timestamps.
+ * Mirrors the Rust contract struct exactly. Budget is `i128` on-chain → `bigint` in JS.
  */
 export interface Job {
+  /** The job's unique on-chain identifier. */
   id: bigint;
+  /** The client (job creator and budget owner). */
   client: Address;
+  /** The service provider (deliverable submitter). */
   provider: Address;
+  /** The evaluator (approves completion and triggers payout). */
   evaluator: Address;
+  /** Token contract address (e.g., USDC SAC). */
   token: Address;
+  /** Budget amount in smallest token units. */
   budget: bigint;
+  /** Current job lifecycle state. */
   status: JobStatus;
+  /** Human-readable job description. */
   description: string;
+  /** IPFS/URL link to the submitted work (empty until submitted). */
   deliverable: string;
+  /** Unix timestamp when the job was funded. */
+  funded_at: bigint;
+  /** Unix timestamp when the job was created. */
+  created_at: bigint;
+  /** Unix timestamp of the last state change. */
+  updated_at: bigint;
 }
 
 /**
- * Connection + deployment configuration required by every SDK client.
+ * Configuration required by SDK clients (`IdentityClient`, `CommerceClient`).
  *
- * Constructed once per process (or per network) and passed to
- * `IdentityClient` / `CommerceClient`.
+ * Specifies network, deployment, and RPC settings. Create once per network
+ * and reuse across client instances. The `TESTNET` constant is a convenient preset.
+ *
+ * @example
+ * ```typescript
+ * const cfg: MarcConfig = {
+ *   ...TESTNET,
+ *   rpcUrl: "https://custom-rpc.example.com", // override RPC
+ * };
+ * const identity = new IdentityClient(cfg);
+ * ```
  */
 export interface MarcConfig {
-  /** Soroban RPC endpoint, e.g. `https://soroban-testnet.stellar.org`. */
+  /** Soroban JSON-RPC endpoint (e.g., `https://soroban-testnet.stellar.org`). */
   rpcUrl: string;
-  /** Network passphrase, e.g. `Networks.TESTNET`. */
+  /** Network passphrase for transaction signing (e.g., `Networks.TESTNET`). */
   networkPassphrase: string;
-  /** Deployed `agent_identity` contract address. */
+  /** Deployed `agent_identity` contract address (starts with `C`). */
   identityContract: Address;
-  /** Deployed `agentic_commerce` contract address. */
+  /** Deployed `agentic_commerce` contract address (starts with `C`). */
   commerceContract: Address;
-  /** USDC (or test SAC) token address used as the escrow currency. */
+  /** Token SAC address for job budgets (e.g., USDC on testnet). */
   usdcToken: Address;
-  /** Optional callback fired after every successful on-chain tx. */
+  /** Optional callback fired after each successful on-chain transaction. */
   onTx?: (hash: string, method: string) => void;
 }
 
-/**
- * Hard-coded deployment preset for Stellar testnet.
- *
- * Values mirror `deployments/testnet.json` at the repo root. Updated whenever
- * `scripts/deploy-testnet.sh` writes a new snapshot. Callers can spread this
- * into a `MarcConfig` and override what they need (e.g. a local RPC URL).
- *
- * `usdcToken` comes from x402-stellar's `STELLAR_TOKENS["stellar-testnet"].USDC`
- * token catalog — it's the canonical USDC SAC on testnet.
- */
-export const TESTNET = {
-  network: "stellar-testnet" as const,
-  networkPassphrase: "Test SDF Network ; September 2015",
-  rpcUrl: (typeof process !== "undefined" && process.env["STELLAR_RPC_URL"])
+interface PresetConfig {
+  network: "stellar-testnet" | "stellar-mainnet";
+  networkPassphrase: string;
+  rpcUrl: string;
+  identityContract: Address;
+  commerceContract: Address;
+  deployer?: Address;
+  usdcToken: Address;
+}
+
+function getEnvValue(name: string) {
+  if (typeof process === "undefined") return undefined;
+  return process.env[name];
+}
+
+function resolveDeploymentValues(network: "testnet" | "mainnet") {
+  const envIdentity = getEnvValue(network === "testnet" ? "MARC_TESTNET_IDENTITY_CONTRACT" : "MARC_MAINNET_IDENTITY_CONTRACT");
+  const envCommerce = getEnvValue(network === "testnet" ? "MARC_TESTNET_COMMERCE_CONTRACT" : "MARC_MAINNET_COMMERCE_CONTRACT");
+  const envUsdc = getEnvValue(network === "testnet" ? "MARC_TESTNET_USDC_TOKEN" : "MARC_MAINNET_USDC_TOKEN");
+
+  if (envIdentity || envCommerce || envUsdc) {
+    return {
+      identityContract: (envIdentity || "") as Address,
+      commerceContract: (envCommerce || "") as Address,
+      usdcToken: (envUsdc || "") as Address,
+    };
+  }
+
+  try {
+    const deploymentPath = fileURLToPath(new URL(`../../deployments/${network}.json`, import.meta.url));
+    const deploymentConfig = JSON.parse(readFileSync(deploymentPath, "utf8"));
+    return {
+      identityContract: (deploymentConfig.agent_identity || deploymentConfig.identityContract || "") as Address,
+      commerceContract: (deploymentConfig.agentic_commerce || deploymentConfig.commerceContract || "") as Address,
+      usdcToken: (deploymentConfig.usdcToken || "") as Address,
+    };
+  } catch {
+    if (network === "testnet") {
+      return {
+        identityContract: "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5" as Address,
+        commerceContract: "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE" as Address,
+        usdcToken: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA" as Address,
+      };
+    }
+
+    return {
+      identityContract: "" as Address,
+      commerceContract: "" as Address,
+      usdcToken: "" as Address,
+    };
+  }
+}
+
+function getEnvRpcUrl(defaultRpcUrl: string) {
+  return (typeof process !== "undefined" && process.env["STELLAR_RPC_URL"])
     ? process.env["STELLAR_RPC_URL"]
-    : "https://soroban-testnet.stellar.org",
-  identityContract:
-    "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5" as Address,
-  commerceContract:
-    "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE" as Address,
-  deployer:
-    "GA5VIZYCUM3IUZZNQTTB7YSLJSE5WZ2EI5EGWNLTWQ234SLSH45MPKX3" as Address,
-  usdcToken:
-    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA" as Address,
-} as const;
+    : defaultRpcUrl;
+}
+
+/**
+ * Preset configuration for Stellar testnet.
+ *
+ * Defaults to the latest deployed testnet addresses when available, while still
+ * allowing environment overrides for custom RPC endpoints or deployment paths.
+ */
+export const TESTNET: PresetConfig = {
+  network: "stellar-testnet",
+  networkPassphrase: "Test SDF Network ; September 2015",
+  rpcUrl: getEnvRpcUrl("https://soroban-testnet.stellar.org"),
+  ...resolveDeploymentValues("testnet"),
+  deployer: "GA5VIZYCUM3IUZZNQTTB7YSLJSE5WZ2EI5EGWNLTWQ234SLSH45MPKX3" as Address,
+};
+
+/**
+ * Preset configuration for Stellar mainnet.
+ */
+export const MAINNET: PresetConfig = {
+  network: "stellar-mainnet",
+  networkPassphrase: "Public Global Stellar Network ; September 2015",
+  rpcUrl: getEnvRpcUrl("https://soroban-rpc.mainnet.stellar.org"),
+  ...resolveDeploymentValues("mainnet"),
+};
+
+export function loadConfig(network: "testnet" | "mainnet"): PresetConfig {
+  return network === "mainnet" ? MAINNET : TESTNET;
+}
 
 /**
  * Symbol topic names emitted by the `agentic_commerce` contract events.

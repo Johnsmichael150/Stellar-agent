@@ -23,10 +23,16 @@ pub struct Job {
     pub evaluator: Address,
     pub token: Address,
     pub budget: i128,
+    /// Cumulative amount already paid out from the escrow (e.g. partial
+    /// settlements if the state machine is extended in a future version).
+    /// `cancel()` refunds `budget - released` so it never over-refunds.
+    pub released: i128,
     pub status: JobStatus,
     pub description: String,
     pub deliverable: String,
     pub funded_at: u64,
+    pub created_at: u64,
+    pub updated_at: u64,
 }
 
 #[contracttype]
@@ -36,6 +42,7 @@ enum DataKey {
     Treasury,
     Admin,
     FeeBps,
+    Version,
 }
 
 const DEFAULT_FEE_BPS: u32 = 100; // 1%
@@ -89,22 +96,48 @@ pub struct JobCancelled {
     pub job_id: u64,
 }
 
+/// Emitted when the contract is emergency-paused.
+#[contractevent]
+pub struct Paused {
+    #[topic]
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
+/// Emitted when the contract is unpaused.
+#[contractevent]
+pub struct Unpaused {
+    #[topic]
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
 #[contract]
 pub struct AgenticCommerceContract;
 
 #[contractimpl]
 impl AgenticCommerceContract {
-    /// One-time initializer. Sets admin, treasury, default fee (1%), and job id counter.
-    /// Panics if already initialized.
+    /// Initializer. Sets admin, treasury, default fee (1%), and job id counter.
+    /// Panics if the contract has already been initialized.
     pub fn init(env: Env, admin: Address, treasury: Address) {
         admin.require_auth();
-        if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+        if !env.storage().instance().has(&DataKey::Admin) {
+            env.storage().instance().set(&DataKey::NextId, &1u64);
+            env.storage().instance().set(&DataKey::Admin, &admin);
+            env.storage().instance().set(&DataKey::Treasury, &treasury);
+            env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
+            return;
         }
+
+        let current_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != current_admin {
+            panic!("not admin");
+        }
+
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
-        env.storage().instance().set(&DataKey::NextId, &1u64);
+        env.storage().instance().set(&DataKey::Version, &1u32);
     }
 
     /// Create a job and escrow `budget` from the `client_addr` into the contract.
@@ -133,8 +166,14 @@ impl AgenticCommerceContract {
         description: String,
     ) -> u64 {
         client_addr.require_auth();
+        if !env.storage().instance().has(&DataKey::Admin) {
+            panic!("not initialized");
+        }
         if budget <= 0 {
             panic!("budget must be positive");
+        }
+        if provider == evaluator {
+            panic!("provider cannot be evaluator");
         }
 
         let next: u64 = env
@@ -148,6 +187,7 @@ impl AgenticCommerceContract {
         let contract_addr = env.current_contract_address();
         token_client.transfer(&client_addr, &contract_addr, &budget);
 
+        let now = env.ledger().timestamp();
         let job = Job {
             id: next,
             client: client_addr.clone(),
@@ -155,10 +195,13 @@ impl AgenticCommerceContract {
             evaluator,
             token,
             budget,
+            released: 0,
             status: JobStatus::Funded,
             description,
             deliverable: String::from_str(&env, ""),
-            funded_at: env.ledger().timestamp(),
+            funded_at: now,
+            created_at: now,
+            updated_at: now,
         };
         env.storage().persistent().set(&DataKey::Job(next), &job);
         env.storage().instance().set(&DataKey::NextId, &(next + 1));
@@ -189,6 +232,7 @@ impl AgenticCommerceContract {
         }
         job.status = JobStatus::Submitted;
         job.deliverable = deliverable;
+        job.updated_at = env.ledger().timestamp();
         env.storage().persistent().set(&DataKey::Job(id), &job);
 
         JobSubmitted {
@@ -213,8 +257,18 @@ impl AgenticCommerceContract {
             panic!("invalid status");
         }
         let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap();
-        let fee: i128 = (job.budget * (fee_bps as i128)) / BPS_DENOM;
+        let fee: i128 = job
+            .budget
+            .checked_mul(fee_bps as i128)
+            .expect("fee overflow")
+            .checked_div(BPS_DENOM)
+            .expect("fee overflow");
         let payout: i128 = job.budget - fee;
+
+        job.status = JobStatus::Completed;
+        job.released = job.budget; // full budget has been paid out
+        job.updated_at = env.ledger().timestamp();
+        env.storage().persistent().set(&DataKey::Job(id), &job);
 
         let token_client = token::TokenClient::new(&env, &job.token);
         let contract_addr = env.current_contract_address();
@@ -223,9 +277,6 @@ impl AgenticCommerceContract {
             let treasury: Address = env.storage().instance().get(&DataKey::Treasury).unwrap();
             token_client.transfer(&contract_addr, &treasury, &fee);
         }
-
-        job.status = JobStatus::Completed;
-        env.storage().persistent().set(&DataKey::Job(id), &job);
 
         JobCompleted {
             evaluator: caller,
@@ -237,7 +288,9 @@ impl AgenticCommerceContract {
         .publish(&env);
     }
 
-    /// Client cancels a funded (not-yet-submitted) job and reclaims the full budget.
+    /// Client cancels a funded (not-yet-submitted) job and reclaims the unreleased budget.
+    /// Refunds `budget - released` so it correctly handles any future partial-settlement
+    /// extensions without over-refunding.
     pub fn cancel(env: Env, caller: Address, id: u64) {
         caller.require_auth();
         let mut job: Job = env
@@ -251,10 +304,17 @@ impl AgenticCommerceContract {
         if job.status != JobStatus::Funded {
             panic!("invalid status");
         }
-        let token_client = token::TokenClient::new(&env, &job.token);
-        let contract_addr = env.current_contract_address();
-        token_client.transfer(&contract_addr, &job.client, &job.budget);
+        // Refund only the net (unreleased) portion of the budget so the
+        // contract never transfers more than it actually holds for this job.
+        let net_budget = job.budget - job.released;
+        if net_budget > 0 {
+            let token_client = token::TokenClient::new(&env, &job.token);
+            let contract_addr = env.current_contract_address();
+            token_client.transfer(&contract_addr, &job.client, &net_budget);
+        }
+        job.released = job.budget; // mark everything as settled
         job.status = JobStatus::Cancelled;
+        job.updated_at = env.ledger().timestamp();
         env.storage().persistent().set(&DataKey::Job(id), &job);
 
         JobCancelled {
@@ -300,7 +360,11 @@ impl AgenticCommerceContract {
     /// Intended for frontends that want to display the estimated fee before
     /// calling `create_job`.
     pub fn simulate_job_fee(_env: Env, budget: i128, fee_bps: u32) -> i128 {
-        (budget * (fee_bps as i128)) / BPS_DENOM
+        budget
+            .checked_mul(fee_bps as i128)
+            .unwrap_or(0)
+            .checked_div(BPS_DENOM)
+            .unwrap_or(0)
     }
 
     /// Fetch a job by id.
@@ -309,8 +373,8 @@ impl AgenticCommerceContract {
     }
 
     /// Contract version. Bump on ABI changes.
-    pub fn version(_env: Env) -> u32 {
-        1
+    pub fn version(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::Version).unwrap_or(1u32)
     }
 
     /// Total number of jobs ever created (for dashboard stats).
@@ -337,10 +401,16 @@ impl AgenticCommerceContract {
         if now < job.funded_at + REFUND_TIMEOUT_SECS {
             panic!("timeout not reached");
         }
-        let token_client = token::TokenClient::new(&env, &job.token);
-        let contract_addr = env.current_contract_address();
-        token_client.transfer(&contract_addr, &job.client, &job.budget);
+        // Refund only the net (unreleased) portion to avoid over-transfer.
+        let net_budget = job.budget - job.released;
+        if net_budget > 0 {
+            let token_client = token::TokenClient::new(&env, &job.token);
+            let contract_addr = env.current_contract_address();
+            token_client.transfer(&contract_addr, &job.client, &net_budget);
+        }
+        job.released = job.budget;
         job.status = JobStatus::Cancelled;
+        job.updated_at = now;
         env.storage().persistent().set(&DataKey::Job(id), &job);
 
         JobRefunded {

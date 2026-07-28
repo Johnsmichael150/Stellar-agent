@@ -10,8 +10,9 @@
     wallets: null,
     agents: null,
     jobs: null,
+    history: null,
     loading: { stats: false, wallets: false, agents: false, jobs: false },
-    jobFilter: "All",
+    jobFilter: "Active",
   };
 
   // ── Stellar Wallets Kit integration ──
@@ -80,11 +81,34 @@
   function disconnectWallet() {
     wallet.connected = false;
     wallet.publicKey = null;
+    wallet.network = null;
+    // Clear all cached state so the next session starts fresh
+    state.stats = null;
+    state.wallets = null;
+    state.agents = null;
+    state.jobs = null;
+    state.history = null;
+    // Invalidate server-side session token if present
+    var token = window.__sessionToken;
+    if (token) {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token },
+      }).catch(function() {});
+      window.__sessionToken = null;
+    }
+    // Tell SWK to disconnect if the API supports it
+    if (swkReady && StellarWalletsKit && typeof StellarWalletsKit.disconnect === "function") {
+      try { StellarWalletsKit.disconnect(); } catch (e) {}
+    }
     updateWalletUI();
-    // Re-show the SWK button
+    // Re-show the SWK connect button
     var btnWrapper = document.getElementById("swk-button-wrapper");
     if (btnWrapper) btnWrapper.style.display = "";
     toast("Wallet disconnected");
+    // Navigate to the root so the user lands on the connect prompt
+    window.location.hash = "#/";
+    navigate();
   }
 
   function updateWalletUI() {
@@ -199,18 +223,20 @@
   }
 
   // ── Toast ──
-  function toast(msg, type = "success") {
+  function toast(msg, type = "success", duration = null) {
     const el = document.createElement("div");
     el.className = "toast " + type;
     el.textContent = msg;
     document.getElementById("toasts").appendChild(el);
-    setTimeout(() => el.remove(), 3000);
+    const autoDismissDuration = duration || (type === "error" ? 8000 : 3000);
+    setTimeout(() => el.remove(), autoDismissDuration);
   }
 
   // ── Transaction Overlay ──
   function showTxOverlay(text) {
     const overlay = document.getElementById("tx-overlay");
-    overlay.querySelector(".tx-text").textContent = text || "Submitting to Stellar...";
+    const modal = overlay.querySelector(".tx-modal");
+    modal.innerHTML = '<div class="tx-spinner"></div><div class="tx-text">' + escapeHtml(text || "Submitting to Stellar...") + '</div>';
     overlay.classList.add("active");
   }
   function hideTxOverlay() {
@@ -466,8 +492,15 @@
 
   function renderJobList() {
     const jobs = state.jobs || [];
-    const filters = ["All", "Funded", "Submitted", "Completed", "Cancelled"];
-    const filtered = state.jobFilter === "All" ? jobs : jobs.filter(function(j) { return j.status === state.jobFilter; });
+    const filters = ["Active", "All", "Funded", "Submitted", "Completed", "Cancelled"];
+    let filtered;
+    if (state.jobFilter === "Active") {
+      filtered = jobs.filter(function(j) { return j.status === "Funded" || j.status === "Submitted"; });
+    } else if (state.jobFilter === "All") {
+      filtered = jobs;
+    } else {
+      filtered = jobs.filter(function(j) { return j.status === state.jobFilter; });
+    }
 
     let tabs = '<div class="filter-tabs">';
     for (const f of filters) {
@@ -477,7 +510,14 @@
 
     let content = '';
     if (filtered.length === 0) {
-      const label = state.jobFilter === "All" ? "" : state.jobFilter.toLowerCase() + " ";
+      let label = "";
+      if (state.jobFilter === "All") {
+        label = "";
+      } else if (state.jobFilter === "Active") {
+        label = "active ";
+      } else {
+        label = state.jobFilter.toLowerCase() + " ";
+      }
       content = '<div class="empty-state">'
         + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>'
         + '<div class="empty-title">No ' + label + 'jobs</div>'
@@ -584,6 +624,86 @@
     );
   }
 
+  // 5. Transaction History
+  async function renderHistory() {
+    setPage(
+      '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
+      + skeletonList(6)
+    );
+
+    await Promise.all([loadJobs(), loadAgents()]);
+
+    var jobs = state.jobs || [];
+    var agents = state.agents || [];
+
+    // Build a unified event list: jobs (all statuses) + agent registrations
+    var events = [];
+    for (var j of jobs) {
+      events.push({ kind: "job", id: j.id, status: j.status, desc: j.description || "—", budget: j.budget, actor: j.client });
+    }
+    for (var a of agents) {
+      events.push({ kind: "agent", id: a.id, uri: a.uri, actor: a.owner });
+    }
+    // Sort by numeric id descending (latest first)
+    events.sort(function(a, b) { return Number(b.id) - Number(a.id); });
+
+    if (events.length === 0) {
+      setPage(
+        '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
+        + '<div class="empty-state">'
+        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>'
+        + '<div class="empty-title">No history yet</div>'
+        + '<div class="empty-desc">Jobs and agent registrations will appear here.</div></div>'
+      );
+      return;
+    }
+
+    var rows = '<div class="history-list">';
+    for (var ev of events) {
+      var icon, label, meta, badge;
+      if (ev.kind === "job") {
+        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
+        label = escapeHtml(ev.desc);
+        meta = 'Client: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + formatMusd(ev.budget) + ' MUSD';
+        badge = statusBadge(ev.status);
+      } else {
+        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>';
+        label = 'Agent registered';
+        meta = 'Owner: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + escapeHtml(ev.uri || '');
+        badge = '<span class="status-badge status-Completed"><span class="dot"></span>Registered</span>';
+      }
+      rows += '<div class="history-row">'
+        + '<div class="history-icon ' + (ev.kind === 'job' ? 'hist-job' : 'hist-agent') + '">' + icon + '</div>'
+        + '<div class="history-body">'
+        + '<div class="history-label">' + label + '</div>'
+        + '<div class="history-meta">' + meta + '</div>'
+        + '</div>'
+        + '<div class="history-right">'
+        + '<div class="history-id">#' + escapeHtml(String(ev.id)) + '</div>'
+        + badge
+        + '</div>'
+        + '</div>';
+    }
+    rows += '</div>';
+
+    var summary = '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(3,1fr)">'
+      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Jobs</div>'
+      + '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>'
+      + '</div><div class="stat-value">' + jobs.length + '</div></div>'
+      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Completed</div>'
+      + '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>'
+      + '</div><div class="stat-value">' + jobs.filter(function(j) { return j.status === "Completed"; }).length + '</div></div>'
+      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Agents Registered</div>'
+      + '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>'
+      + '</div><div class="stat-value">' + agents.length + '</div></div>'
+      + '</div>';
+
+    setPage(
+      '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
+      + summary + rows
+    );
+  }
+
   // ── Global Actions ──
 
   window.__copy = copyToClipboard;
@@ -611,6 +731,8 @@
       + '<input class="form-input" id="cj-desc" value="Dashboard test job" placeholder="Job description..."></div>'
       + '<div class="form-group"><label class="form-label">Budget (MUSD units, 7 decimals)</label>'
       + '<input class="form-input" id="cj-budget" value="10000000" placeholder="10000000 = 1 MUSD"></div>'
+      + '<div class="form-group"><label class="form-label">Provider Address <span style="color:var(--text-muted);font-weight:400">(must be a registered agent)</span></label>'
+      + '<input class="form-input" id="cj-provider" placeholder="Leave blank to use default seller" autocomplete="off" spellcheck="false"></div>'
       + '<div class="modal-actions">'
       + '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>'
       + '<button class="btn btn-primary" onclick="window.__doCreateJob()">Create Job</button></div>'
@@ -622,16 +744,22 @@
     const budget = document.getElementById("cj-budget").value;
     const walletEl = document.getElementById("cj-wallet");
     const walletVal = walletEl ? walletEl.value : "buyer";
+    const providerEl = document.getElementById("cj-provider");
+    const providerVal = providerEl && providerEl.value.trim() ? providerEl.value.trim() : undefined;
     const overlay = document.querySelector(".modal-overlay");
     if (overlay) overlay.remove();
     showTxOverlay("Creating job on Stellar...");
     try {
       if (wallet.connected) {
-        const res = await signAndSubmit("/build/createJob", { description: description, budget: budget });
+        const params = { description: description, budget: budget };
+        if (providerVal) params.provider = providerVal;
+        const res = await signAndSubmit("/build/createJob", params);
         hideTxOverlay();
         toast("Job created! tx: " + (res.hash || "").slice(0, 8) + "...");
       } else {
-        const res = await api("/jobs/create", { method: "POST", body: { wallet: walletVal, description: description, budget: budget } });
+        const body = { wallet: walletVal, description: description, budget: budget };
+        if (providerVal) body.provider = providerVal;
+        const res = await api("/jobs/create", { method: "POST", body: body });
         hideTxOverlay();
         toast("Job #" + res.jobId + " created!");
       }
@@ -680,6 +808,9 @@
   };
 
   window.__cancelJob = async function(id) {
+    const confirmed = window.confirm("Cancel this job and refund the escrowed funds?");
+    if (!confirmed) return;
+
     showTxOverlay("Cancelling job & refunding...");
     try {
       if (wallet.connected) {
@@ -723,7 +854,7 @@
     showTxOverlay("Registering agent on Stellar...");
     try {
       if (wallet.connected) {
-        const res = await signAndSubmit("/build/register", { uri: uri });
+        const res = await signAndSubmit("/agents/register", { wallet: "freighter", uri: uri });
         hideTxOverlay();
         toast("Agent registered! tx: " + (res.hash || "").slice(0, 8) + "...");
       } else {
@@ -731,6 +862,7 @@
         hideTxOverlay();
         toast("Agent #" + res.agentId + " registered!");
       }
+      await loadAgents();
       renderAgents();
     } catch (e) {
       hideTxOverlay();
@@ -744,6 +876,7 @@
     "/wallet": renderWallets,
     "/jobs": renderJobs,
     "/agents": renderAgents,
+    "/history": renderHistory,
   };
 
   function getRoute() {
@@ -815,6 +948,13 @@
         await loadWallets();
         if (JSON.stringify(state.wallets) !== oldWallets) {
           renderWallets();
+        }
+      } else if (route === "/history") {
+        var oldJobs3 = JSON.stringify(state.jobs);
+        var oldAgents3 = JSON.stringify(state.agents);
+        await Promise.all([loadJobs(), loadAgents()]);
+        if (JSON.stringify(state.jobs) !== oldJobs3 || JSON.stringify(state.agents) !== oldAgents3) {
+          renderHistory();
         }
       }
     } catch (e) {

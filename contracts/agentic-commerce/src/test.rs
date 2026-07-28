@@ -1,7 +1,7 @@
 use super::*;
-use soroban_sdk::testutils::Address as _;
+use soroban_sdk::testutils::{Address as _, Events as _};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
-use soroban_sdk::{Address, Env, String};
+use soroban_sdk::{Address, Env, Event, String};
 
 fn setup<'a>(env: &Env) -> (AgenticCommerceContractClient<'a>, Address, Address) {
     let admin = Address::generate(env);
@@ -25,6 +25,33 @@ fn deploy_token<'a>(
     )
 }
 
+/// create_job() must persist the description field so dashboards can display
+/// human-readable job details without a separate metadata lookup.
+#[test]
+fn create_job_stores_and_returns_description() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup(&env);
+
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    let description = String::from_str(&env, "Generate a product description for SKU-42");
+    let job_id = client.create_job(
+        &buyer,
+        &seller,
+        &buyer,
+        &token_addr,
+        &100_000i128,
+        &description,
+    );
+
+    let job = client.get_job(&job_id).unwrap();
+    assert_eq!(job.description, description);
+}
+
 #[test]
 fn init_sets_admin_and_treasury() {
     let env = Env::default();
@@ -33,12 +60,23 @@ fn init_sets_admin_and_treasury() {
 }
 
 #[test]
-#[should_panic(expected = "already initialized")]
-fn init_rejects_double_initialization() {
+fn init_allows_reinit_by_same_admin() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, treasury) = setup(&env);
+    // Re-initialization by the same admin should succeed (for updating treasury/fee params)
     client.init(&admin, &treasury);
+}
+
+#[test]
+#[should_panic(expected = "not admin")]
+fn init_rejects_reinit_by_different_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, treasury) = setup(&env);
+    let different_admin = Address::generate(&env);
+    // Re-initialization by a different admin should panic
+    client.init(&different_admin, &treasury);
 }
 
 #[test]
@@ -67,6 +105,17 @@ fn create_job_transfers_budget_into_escrow() {
     );
 
     assert_eq!(job_id, 1);
+
+    let expected_event = JobCreated {
+        client: buyer.clone(),
+        job_id,
+        budget,
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&contract_id),
+        [expected_event.to_xdr(&env, &contract_id)],
+    );
+
     assert_eq!(token.balance(&contract_id), 100_000);
     assert_eq!(token.balance(&buyer), 900_000);
 
@@ -97,6 +146,15 @@ fn submit_flips_status_and_records_deliverable() {
     );
 
     client.submit(&seller, &id, &String::from_str(&env, "ipfs://work.json"));
+
+    let expected_event = JobSubmitted {
+        provider: seller,
+        job_id: id,
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&client.address),
+        [expected_event.to_xdr(&env, &client.address)],
+    );
 
     let job = client.get_job(&id).unwrap();
     assert_eq!(job.status, JobStatus::Submitted);
@@ -146,6 +204,18 @@ fn complete_splits_payout_99_1_between_provider_and_treasury() {
     );
     client.submit(&seller, &id, &String::from_str(&env, "ipfs://work.json"));
     client.complete(&buyer, &id);
+
+    let expected_event = JobCompleted {
+        evaluator: buyer.clone(),
+        job_id: id,
+        payout: 99_000,
+        fee: 1_000,
+        timestamp: env.ledger().timestamp(),
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&client.address),
+        [expected_event.to_xdr(&env, &client.address)],
+    );
 
     assert_eq!(token.balance(&seller), 99_000);
     assert_eq!(token.balance(&treasury), 1_000);
@@ -199,6 +269,16 @@ fn cancel_refunds_buyer_when_not_yet_submitted() {
     assert_eq!(token.balance(&buyer), 900_000);
 
     client.cancel(&buyer, &id);
+
+    let expected_event = JobCancelled {
+        client: buyer.clone(),
+        job_id: id,
+    };
+    assert_eq!(
+        env.events().all().filter_by_contract(&client.address),
+        [expected_event.to_xdr(&env, &client.address)],
+    );
+
     assert_eq!(token.balance(&buyer), 1_000_000);
     assert_eq!(token.balance(&client.address), 0);
     let job = client.get_job(&id).unwrap();
@@ -257,4 +337,29 @@ fn set_treasury_rejects_non_admin() {
     let mallory = Address::generate(&env);
     let new_treasury = Address::generate(&env);
     client.set_treasury(&mallory, &new_treasury);
+}
+
+#[test]
+#[should_panic(expected = "not initialized")]
+fn create_job_rejects_call_before_init() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgenticCommerceContract, ());
+    let client = AgenticCommerceContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let (token_addr, _token, stellar_token) = deploy_token(&env, &admin);
+    stellar_token.mint(&buyer, &1_000_000);
+
+    // init() was never called on this contract instance.
+    client.create_job(
+        &buyer,
+        &seller,
+        &buyer,
+        &token_addr,
+        &100_000i128,
+        &String::from_str(&env, "job before init"),
+    );
 }

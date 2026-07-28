@@ -31,5 +31,5 @@ export const sellerKeypair = DEMO_MODE
 export function getKeypair(wallet: string): Keypair {
   if (wallet === "buyer") return buyerKeypair;
   if (wallet === "seller") return sellerKeypair;
-  throw new Error(`Unknown wallet: ${wallet}`);
+  throw new Error("Invalid wallet");
 }

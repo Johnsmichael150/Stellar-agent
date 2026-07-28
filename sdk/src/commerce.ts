@@ -1,16 +1,22 @@
 import {
   Contract,
   Keypair,
-  rpc,
-  TransactionBuilder,
   nativeToScVal,
   scValToNative,
-  BASE_FEE,
   Address,
   xdr,
-  Account,
 } from "@stellar/stellar-sdk";
 import type { Job, JobStatus, MarcConfig } from "./types.js";
+import { BaseClient } from "./baseClient.js";
+
+// --- ScVal helpers (exported for custom contract interactions) ---
+
+export const i128ToScVal = (v: bigint) => nativeToScVal(v, { type: "i128" });
+export const u128ToScVal = (v: bigint) => nativeToScVal(v, { type: "u128" });
+export const u64ToScVal  = (v: bigint) => nativeToScVal(v, { type: "u64" });
+export const u32ToScVal  = (v: number) => nativeToScVal(v, { type: "u32" });
+export const strToScVal  = (v: string) => nativeToScVal(v, { type: "string" });
+export const addrToScVal = (v: string) => new Address(v).toScVal();
 
 /**
  * Typed wrapper around the `agentic_commerce` Soroban contract.
@@ -18,8 +24,7 @@ import type { Job, JobStatus, MarcConfig } from "./types.js";
  * Handles job lifecycle: create → submit → complete/cancel, plus
  * admin helpers (setTreasury, setFeeBps) and read-only queries.
  */
-export class CommerceClient {
-  private server: rpc.Server;
+export class CommerceClient extends BaseClient {
   private contract: Contract;
 
   constructor(private cfg: MarcConfig) {
@@ -42,6 +47,10 @@ export class CommerceClient {
     budget: bigint,
     description: string,
   ): Promise<bigint> {
+    if (budget <= 0n) {
+      throw new Error("budget must be greater than 0");
+    }
+
     const op = this.contract.call(
       "create_job",
       new Address(client.publicKey()).toScVal(),
@@ -51,7 +60,19 @@ export class CommerceClient {
       nativeToScVal(budget, { type: "i128" }),
       nativeToScVal(description, { type: "string" }),
     );
-    return await this.invoke(client, op, (v) => BigInt(scValToNative(v) as string));
+    return await this.invoke(client, op, (v) => BigInt(scValToNative(v) as string), "commerce");
+  }
+
+  /** Create a job and wait for the transaction to finalize. */
+  async createJobAndWait(
+    client: Keypair,
+    provider: string,
+    evaluator: string,
+    token: string,
+    budget: bigint,
+    description: string,
+  ): Promise<bigint> {
+    return this.createJob(client, provider, evaluator, token, budget, description);
   }
 
   /** Provider submits a deliverable for a funded job. */
@@ -66,7 +87,7 @@ export class CommerceClient {
       nativeToScVal(jobId, { type: "u64" }),
       nativeToScVal(deliverable, { type: "string" }),
     );
-    await this.invoke(provider, op, () => undefined);
+    await this.invoke(provider, op, () => undefined, "commerce");
   }
 
   /** Evaluator marks a submitted job as completed (triggers 99/1 payout). */
@@ -76,7 +97,7 @@ export class CommerceClient {
       new Address(evaluator.publicKey()).toScVal(),
       nativeToScVal(jobId, { type: "u64" }),
     );
-    await this.invoke(evaluator, op, () => undefined);
+    await this.invoke(evaluator, op, () => undefined, "commerce");
   }
 
   /** Client cancels a funded job (full refund). */
@@ -86,7 +107,7 @@ export class CommerceClient {
       new Address(client.publicKey()).toScVal(),
       nativeToScVal(jobId, { type: "u64" }),
     );
-    await this.invoke(client, op, () => undefined);
+    await this.invoke(client, op, () => undefined, "commerce");
   }
 
   /** Read a job by ID. Returns null if not found. */
@@ -108,8 +129,16 @@ export class CommerceClient {
         status: (Array.isArray(native.status) ? native.status[0] : native.status) as JobStatus,
         description: native.description,
         deliverable: native.deliverable,
+        funded_at: BigInt(native.funded_at ?? 0),
+        created_at: BigInt(native.created_at ?? 0),
+        updated_at: BigInt(native.updated_at ?? 0),
       } as Job;
     });
+  }
+
+  /** Disconnect any underlying resources. */
+  disconnect(): void {
+    // No-op for the current implementation.
   }
 
   /** Read the current fee in basis points. */
@@ -125,7 +154,7 @@ export class CommerceClient {
       new Address(admin.publicKey()).toScVal(),
       new Address(newTreasury).toScVal(),
     );
-    await this.invoke(admin, op, () => undefined);
+    await this.invoke(admin, op, () => undefined, "commerce");
   }
 
   /** Admin: update the fee (capped at 500 bps / 5%). */
@@ -135,64 +164,24 @@ export class CommerceClient {
       new Address(admin.publicKey()).toScVal(),
       nativeToScVal(newBps, { type: "u32" }),
     );
-    await this.invoke(admin, op, () => undefined);
+    await this.invoke(admin, op, () => undefined, "commerce");
   }
 
-  // --- internals (same pattern as IdentityClient) ---
-
-  private async invoke<T>(
-    signer: Keypair,
-    op: xdr.Operation,
-    decode: (scVal: xdr.ScVal) => T,
-  ): Promise<T> {
-    const account = await this.server.getAccount(signer.publicKey());
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: this.cfg.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
-    const prepared = await this.server.prepareTransaction(tx);
-    prepared.sign(signer);
-    const sent = await this.server.sendTransaction(prepared);
-    if (sent.status === "ERROR") throw new Error(`submit failed: ${sent.errorResult}`);
-    let getResp = await this.server.getTransaction(sent.hash);
-    while (getResp.status === "NOT_FOUND") {
-      await new Promise((r) => setTimeout(r, 1000));
-      getResp = await this.server.getTransaction(sent.hash);
+  /**
+   * Get the balance of `address` for a given token.
+   * Pass `"native"` for XLM (returns stroops as bigint),
+   * or a Soroban token contract address for SAC/custom tokens.
+   */
+  async getBalance(address: string, token: string): Promise<bigint> {
+    if (token === "native") {
+      const account = await this.server.getAccount(address);
+      const balances = (account as unknown as { balances?: Array<{ asset_type?: string; balance?: string }> }).balances ?? [];
+      const xlmBalance = balances.find((b) => b.asset_type === "native");
+      return BigInt(Math.round(Number(xlmBalance?.balance ?? "0") * 1e7));
     }
-    if (getResp.status !== "SUCCESS") {
-      const failed = getResp as rpc.Api.GetFailedTransactionResponse;
-      const detail = failed.resultXdr?.result()?.switch()?.name ?? getResp.status;
-      throw new Error(`tx failed: ${detail}`);
-    }
-    this.cfg.onTx?.(sent.hash, "commerce");
-    return decode(getResp.returnValue!);
+    const tokenContract = new Contract(token);
+    const op = tokenContract.call("balance", new Address(address).toScVal());
+    return await this.simulate(op, (v) => BigInt(scValToNative(v) as string));
   }
 
-  private async simulate<T>(op: xdr.Operation, decode: (v: xdr.ScVal) => T): Promise<T> {
-    const ephemeral = Keypair.random();
-    const dummy = new Account(ephemeral.publicKey(), "0");
-    const tx = new TransactionBuilder(dummy, {
-      fee: BASE_FEE,
-      networkPassphrase: this.cfg.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const sim = await this.server.simulateTransaction(tx);
-        if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
-        const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
-        if (!result) throw new Error("no simulation result");
-        return decode(result.retval);
-      } catch (err) {
-        if (attempt === 3) throw err;
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
-      }
-    }
-    throw new Error("unreachable");
-  }
 }

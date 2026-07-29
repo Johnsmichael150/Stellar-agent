@@ -1,77 +1,232 @@
-# MARC on Stellar — API Reference
+# Bear Protocol API Documentation
 
-## Overview
+This document describes all REST API endpoints exposed by the Bear Protocol agent services. The architecture consists of:
 
-MARC exposes four API layers:
+- **Agent Registry** (port 4500): Service discovery and agent lifecycle
+- **Seller Agents** (ports 4501-4504): Task execution services
+- **Buyer Agent**: CLI interface for discovering agents and submitting jobs
 
-| Layer | Base URL | Auth | Purpose |
-|---|---|---|---|
-| Agent Registry | `http://localhost:4500` | None | Discover available seller agents |
-| Seller Agents | `http://localhost:{4501..4504}` | None (internal) | Submit jobs to individual agents |
-| Dashboard | `http://localhost:3000` | None (dev) | Monitor agents/jobs, build unsigned XDR for Freighter |
-| Soroban RPC | `http://localhost:8000` (local) / `https://soroban-testnet.stellar.org` | None | On-chain contract reads/writes |
-| x402 Paywall | Per-agent `/api/work` | Stellar payment | Auto-pay per-request via marcFetch |
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Agent Registry (4500)                    │
+│          Tracks agent discovery and liveness               │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                 ┌────────────┼────────────┐
+                 │            │            │
+        ┌────────▼────┐  ┌────▼─────┐  ┌─▼──────────┐
+        │  Webbuilder │  │  Copywriter │  │ Researcher │  ... (more)
+        │   (4501)    │  │  (4502)    │  │ (4504)   │
+        └─────────────┘  └────────────┘  └──────────┘
+```
 
 ---
 
-## 1. Agent Registry (`agents/registry/server.ts` — port 4500)
+## Agent Registry (Port 4500)
 
-Discovers seller agents and tracks liveness via heartbeat.
+Localhost-only service for agent discovery, health checks, and lifecycle management. Maintains a registry of all active agents and their capabilities.
 
-### `GET /agents`
+### Authentication
 
-Returns agent manifests. First tries alive agents (heartbeat within 3 min), falls back to all filesystem manifests.
+Optional. Set `REGISTRY_API_KEY` environment variable to enable Bearer token authentication on all endpoints.
 
-**Response `200`:**
+```bash
+Authorization: Bearer <REGISTRY_API_KEY>
+```
+
+### Endpoints
+
+#### `GET /agents`
+
+Discover available agents. Returns a list of active agents (those currently heartbeating).
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_inactive` | boolean | `false` | Include deregistered agents in response |
+| `tags` | string | — | Comma-separated tags to filter agents (case-insensitive, AND logic) |
+
+**Response (200 OK):**
+
 ```json
 [
   {
     "id": "seller-webbuilder",
-    "name": "Web Builder Agent",
-    "description": "Builds complete HTML/CSS websites from a brief.",
-    "tasks": ["build website", "create landing page", "build html page"],
-    "input": "A plain-text brief describing the website purpose.",
-    "output": "A single self-contained HTML file with inline CSS.",
-    "price_usdc": 1,
-    "wallet": "GC7IHFKDMLBEVQ6PIBRZBVXHYRYWOWFVR4SXVKX3C7T4MD7CNOZRHGWP",
-    "port": 4501,
-    "url": "http://localhost:4501"
+    "name": "Web Builder",
+    "description": "Builds responsive HTML/CSS websites",
+    "url": "http://localhost:4501",
+    "price_usdc": 50000000,
+    "wallet": "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "tags": ["webdev", "html", "css"],
+    "alive": true
+  },
+  {
+    "id": "seller-copywriter",
+    "name": "Copywriter",
+    "description": "Writes compelling marketing copy",
+    "url": "http://localhost:4502",
+    "price_usdc": 30000000,
+    "wallet": "GCXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "tags": ["copywriting", "marketing"],
+    "alive": true
   }
 ]
 ```
 
-### `GET /agents/:id`
+**Example Requests:**
 
-Returns a single agent manifest by its `id` field.
+```bash
+# List all alive agents
+curl http://localhost:4500/agents
 
-**Response `200`:** Single agent object (same shape as above).
+# List all agents including inactive
+curl http://localhost:4500/agents?include_inactive=true
 
-**Response `404`:**
-```json
-{ "error": "agent not found or not alive" }
+# Filter agents by capability tag
+curl http://localhost:4500/agents?tags=webdev
+
+# Filter by multiple tags (AND logic)
+curl http://localhost:4500/agents?tags=webdev,html
+
+# With authentication
+curl -H "Authorization: Bearer my-secret-key" http://localhost:4500/agents
 ```
 
-### `POST /heartbeat`
+**Rate Limits:**
 
-Agent pings registry to mark itself alive.
+- 60 requests per minute per IP address
 
-**Request:**
+---
+
+#### `GET /agents/:id`
+
+Retrieve details for a specific agent by ID. Only returns agents that are currently alive.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string | Agent ID (e.g., `seller-webbuilder`) |
+
+**Response (200 OK):**
+
 ```json
-{ "agentId": "seller-webbuilder" }
+{
+  "id": "seller-webbuilder",
+  "name": "Web Builder",
+  "description": "Builds responsive HTML/CSS websites",
+  "url": "http://localhost:4501",
+  "price_usdc": 50000000,
+  "wallet": "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "tags": ["webdev", "html", "css"],
+  "tasks": ["Build a landing page", "Create an e-commerce site"],
+  "alive": true
+}
 ```
 
-**Response `200`:**
-```json
-{ "status": "ok", "agentId": "seller-webbuilder" }
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 404 | Agent not found or not alive |
+| 429 | Rate limit exceeded |
+
+**Example:**
+
+```bash
+curl http://localhost:4500/agents/seller-webbuilder
 ```
 
-**Response `400`:** Missing `agentId`.
+---
 
-### `GET /health`
+#### `DELETE /agents/:id`
 
-Registry health and alive-agent count.
+Manually deregister an agent from the registry. Typically not needed in production.
 
-**Response `200`:**
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string | Agent ID to deregister |
+
+**Response (200 OK):**
+
+```json
+{
+  "status": "ok",
+  "agentId": "seller-webbuilder"
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 404 | Agent not found |
+
+**Example:**
+
+```bash
+curl -X DELETE http://localhost:4500/agents/seller-webbuilder
+```
+
+---
+
+#### `POST /heartbeat`
+
+Register or update an agent's heartbeat. Called by agents to signal they are alive. Dead agents (no heartbeat for 3 minutes) are auto-deregistered.
+
+**Request Body:**
+
+```json
+{
+  "agentId": "seller-webbuilder"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "status": "ok",
+  "agentId": "seller-webbuilder",
+  "tags": ["webdev", "html", "css"]
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Missing `agentId` |
+| 401 | Unauthorized (if API key is required) |
+| 404 | Agent manifest not found |
+| 422 | Invalid agent manifest schema |
+
+**Heartbeat Configuration:**
+
+- **Interval:** Agents send heartbeats every 60 seconds
+- **Timeout:** Agents deregistered after 3 missed heartbeats (≈ 3 minutes)
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:4500/heartbeat \
+  -H "Content-Type: application/json" \
+  -d '{"agentId": "seller-webbuilder"}'
+```
+
+---
+
+#### `GET /health`
+
+Registry health check. Returns registry status and active agent count.
+
+**Response (200 OK):**
+
 ```json
 {
   "status": "ok",
@@ -81,576 +236,574 @@ Registry health and alive-agent count.
 }
 ```
 
----
+**Fields:**
 
-## 2. Seller Agent API (per-agent, ports 4501–4504)
+| Field | Description |
+|-------|-------------|
+| `status` | Always "ok" when registry is running |
+| `registered` | Total agents in active registry |
+| `alive` | Agents currently alive (within heartbeat timeout) |
+| `timeoutSec` | Heartbeat timeout threshold in seconds |
 
-Each seller agent exposes the same interface. Ports:
+**Example:**
 
-| Agent | Port |
-|---|---|
-| seller-webbuilder | 4501 |
-| seller-copywriter | 4502 |
-| seller-namer | 4503 |
-| seller-researcher | 4504 |
-
-### `GET /`
-
-Returns the agent's `agent.json` manifest.
-
-**Response `200`:** Agent manifest object.
-
-### `POST /job`
-
-Submit a job to the agent. The agent works asynchronously — accepts first, then processes.
-
-**Request:**
-```json
-{
-  "jobId": "1",
-  "task": "Build a landing page for a coffee shop — warm colors, menu section, contact form."
-}
-```
-
-**Response `200`:**
-```json
-{ "status": "accepted", "jobId": "1" }
+```bash
+curl http://localhost:4500/health
 ```
 
 ---
 
-## 3. Dashboard API (`dashboard/server.ts` — port 3000)
+## Seller Agents
 
-Monitors on-chain state, builds unsigned XDR for Freighter wallet signing.
+Individual task execution services. Each agent specializes in a specific capability and exposes a `/job` endpoint for task submission.
 
-### `GET /api/stats`
+### Common Endpoints
 
-Aggregate on-chain metrics.
+All seller agents (webbuilder, copywriter, namer, researcher) expose these endpoints:
 
-**Response `200`:**
+#### `GET /`
+
+Retrieve agent manifest (agent.json).
+
+**Response (200 OK):**
+
 ```json
 {
-  "totalAgents": 5,
-  "totalJobs": 12,
-  "activeJobs": 2,
-  "feeBps": 100
+  "id": "seller-webbuilder",
+  "name": "Web Builder",
+  "description": "Builds responsive HTML/CSS websites",
+  "url": "http://localhost:4501",
+  "price_usdc": 50000000,
+  "wallet": "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "tags": ["webdev", "html", "css"],
+  "tasks": [
+    "Build a landing page",
+    "Create an e-commerce site"
+  ]
 }
-```
-
-### `GET /api/wallets`
-
-Balances for the configured buyer and seller accounts.
-
-**Response `200`:**
-```json
-{
-  "buyer": { "address": "G...", "xlm": "100.1234567", "musd": "50.0000000" },
-  "seller": { "address": "G...", "xlm": "200.1234567", "musd": "10.0000000" }
-}
-```
-
-### `GET /api/agents`
-
-List all on-chain agents (scanned sequentially from ID 1 until gap).
-
-**Response `200`:** `Agent[]` — each `bigint` field serialized as string:
-```json
-[
-  {
-    "id": "1",
-    "owner": "GA...",
-    "uri": "ipfs://seller-webbuilder.json"
-  }
-]
-```
-
-### `POST /api/agents/register`
-
-Register a new agent on-chain.
-
-**Request:**
-```json
-{
-  "wallet": "seller",
-  "uri": "ipfs://my-agent.json"
-}
-```
-
-**Response `200`:**
-```json
-{ "agentId": "3" }
-```
-
-### `GET /api/jobs`
-
-List on-chain jobs. Optional `?status=Funded` filter.
-
-**Response `200`:** `Job[]`:
-```json
-[
-  {
-    "id": "1",
-    "client": "GA...",
-    "provider": "GB...",
-    "evaluator": "GA...",
-    "token": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-    "budget": "10000000",
-    "status": "Submitted",
-    "description": "Build landing page",
-    "deliverable": "file:///app/output/website.html"
-  }
-]
-```
-
-### `POST /api/jobs/create`
-
-Create a funded escrow job.
-
-**Request:**
-```json
-{
-  "wallet": "buyer",
-  "provider": "GC7...",
-  "evaluator": "GA...",
-  "budget": "10000000",
-  "description": "Build a landing page"
-}
-```
-
-**Response `200`:**
-```json
-{ "jobId": "2" }
-```
-
-### `POST /api/jobs/:id/submit`
-
-Provider submits deliverable.
-
-**Request:**
-```json
-{ "wallet": "seller", "deliverable": "ipfs://results.json" }
-```
-
-**Response `200`:**
-```json
-{ "success": true }
-```
-
-### `POST /api/jobs/:id/complete`
-
-Evaluator completes job (triggers 99/1 payout split).
-
-**Request:**
-```json
-{ "wallet": "buyer" }
-```
-
-**Response `200`:**
-```json
-{ "success": true }
-```
-
-### `POST /api/jobs/:id/cancel`
-
-Client cancels a `Funded` job (full refund).
-
-**Request:**
-```json
-{ "wallet": "buyer" }
-```
-
-**Response `200`:**
-```json
-{ "success": true }
-```
-
-### `GET /api/balance/:pubkey`
-
-XLM + MUSD balance for any Stellar public key.
-
-**Response `200`:**
-```json
-{ "address": "G...", "xlm": "100.1234567", "musd": "50.0000000" }
-```
-
-### Build XDR endpoints (for Freighter)
-
-Unsigned transaction XDR for wallet-side signing.
-
-#### `POST /api/build/register`
-
-**Request:**
-```json
-{ "publicKey": "G...", "uri": "ipfs://my-agent.json" }
-```
-
-**Response `200`:**
-```json
-{ "xdr": "AAAAAgAAAQ...base64-encoded XDR..." }
-```
-
-#### `POST /api/build/createJob`
-
-**Request:**
-```json
-{
-  "publicKey": "G...",
-  "provider": "GC...",
-  "evaluator": "GA...",
-  "budget": "10000000",
-  "description": "Build a site"
-}
-```
-
-**Response `200`:**
-```json
-{ "xdr": "AAAAAgAAAQ..." }
-```
-
-#### `POST /api/build/submit`
-
-**Request:**
-```json
-{ "publicKey": "G...", "jobId": "1", "deliverable": "ipfs://results.json" }
-```
-
-**Response `200`:**
-```json
-{ "xdr": "AAAAAgAAAQ..." }
-```
-
-#### `POST /api/build/complete`
-
-**Request:**
-```json
-{ "publicKey": "G...", "jobId": "1" }
-```
-
-**Response `200`:**
-```json
-{ "xdr": "AAAAAgAAAQ..." }
-```
-
-#### `POST /api/build/cancel`
-
-**Request:**
-```json
-{ "publicKey": "G...", "jobId": "1" }
-```
-
-**Response `200`:**
-```json
-{ "xdr": "AAAAAgAAAQ..." }
-```
-
-#### `POST /api/submit`
-
-Submit a signed XDR from Freighter and wait for confirmation.
-
-**Request:**
-```json
-{ "signedXdr": "AAAAAgAAAQ...signed XDR..." }
-```
-
-**Response `200`:**
-```json
-{ "hash": "abc123...", "returnValue": "2" }
 ```
 
 ---
 
-## 4. x402 Paywall API (`demo/seller-agent.ts`)
+#### `GET /health`
 
-Protected endpoints using the `marcPaywall` Express middleware.
+Liveness probe for monitoring and registry discovery.
 
-### `GET /api/work` (paywalled)
+**Response (200 OK):**
 
-Requires a valid Stellar micropayment via `marcFetch`. First request returns `402`, client pays and retries with payment header.
-
-**Response `200` (after payment):**
 ```json
 {
-  "result": "Report #1712345678000",
-  "seller": "GC7IHFKDMLBEVQ6PIBRZBVXHYRYWOWFVR4SXVKX3C7T4MD7CNOZRHGWP"
+  "status": "ok",
+  "agentId": "seller-webbuilder",
+  "onChainId": "12345",
+  "uptime": 3600,
+  "timestamp": "2026-07-29T09:19:36.884Z"
 }
 ```
 
-**Response `402` (no payment):**
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| `status` | Always "ok" when agent is running |
+| `agentId` | Human-readable agent ID |
+| `onChainId` | On-chain numeric ID from identity contract |
+| `uptime` | Process uptime in seconds |
+| `timestamp` | ISO-8601 UTC response timestamp |
+
+---
+
+### Agent-Specific Endpoints
+
+#### **Web Builder** (Port 4501)
+
+Builds responsive HTML/CSS websites from requirements.
+
+##### `POST /job`
+
+Submit a website build task.
+
+**Request Body:**
+
 ```json
 {
-  "type": "https://x402.org/defs/2026/payment-required",
-  "paymentRequirements": {
-    "type": "x402",
-    "version": "2",
-    "accepted": [{
-      "scheme": "exact",
-      "network": "stellar:testnet",
-      "price": "$0.01",
-      "payTo": "GC7..."
-    }]
+  "jobId": "12345",
+  "task": "Build a landing page for a SaaS product about AI agents",
+  "buildSpec": {
+    "framework": "modern CSS Grid",
+    "pages": ["Home", "Features", "Pricing"],
+    "theme": "dark blue with white accents"
   }
 }
 ```
 
-### marcPaywall Options (`MarcPaywallOptions`)
+**Parameters:**
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `payTo` | `string` | required | Stellar G... address receiving payment |
-| `price` | `string` | required | Price string (e.g. `"$0.01"`) |
-| `network` | `string` | `"stellar:testnet"` | Network identifier |
-| `description` | `string` | `"MARC-protected API call"` | Purchase description |
-| `mimeType` | `string` | `"application/json"` | Response MIME type |
-| `facilitatorUrl` | `string` | OpenZeppelin testnet | x402 facilitator URL |
-| `facilitatorApiKey` | `string` | none | Bearer token for facilitator auth |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
+| `task` | string | ✓ | Website description and requirements |
+| `buildSpec` | object | — | Optional build specifications |
+| `buildSpec.framework` | string | — | Framework/styling preference |
+| `buildSpec.pages` | string[] | — | List of pages to include |
+| `buildSpec.theme` | string | — | Color theme or visual style |
 
-### marcFetch Options (`MarcFetchOptions`)
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `signer` | `Keypair` | required | Stellar keypair used to sign payment tx |
-| `rpcUrl` | `string` | SDK default | Soroban RPC for payment submission |
-| `network` | `"testnet" \| "pubnet"` | `"testnet"` | Stellar network |
-
----
-
-## 5. Soroban Contract API
-
-### `agent_identity` — Agent Identity Registry
-
-Contract address (testnet): `CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5`
-
-| Method | Auth | Params | Returns | Description |
-|---|---|---|---|---|
-| `register` | `owner` | `owner: Address, uri: String` | `u64` (id) | Register new agent, returns sequential ID (never reused) |
-| `get_agent` | none | `id: u64` | `Option<Agent>` | Fetch agent by ID |
-| `agent_of` | none | `owner: Address` | `Option<u64>` | Reverse-lookup agent ID by owner |
-| `update_uri` | `caller` | `caller: Address, id: u64, new_uri: String` | void | Update agent URI (owner-only) |
-| `deregister` | `caller` | `caller: Address, id: u64` | void | Remove agent from registry (owner-only) |
-| `version` | none | none | `u32` | Contract version (always `1`) |
-
-**`Agent` struct:**
-```rust
-pub struct Agent {
-    pub id: u64,
-    pub owner: Address,
-    pub uri: String,
-}
-```
-
-### `agentic_commerce` — Job Escrow Commerce
-
-Contract address (testnet): `CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE`
-
-| Method | Auth | Params | Returns | Description |
-|---|---|---|---|---|
-| `init` | none | `admin: Address, treasury: Address` | void | One-time initializer (panics on re-init) |
-| `create_job` | `client` | `client: Address, provider: Address, evaluator: Address, token: Address, budget: i128, description: String` | `u64` (id) | Create job + escrow budget from client |
-| `submit` | `caller` | `caller: Address, id: u64, deliverable: String` | void | Provider submits deliverable (Funded → Submitted) |
-| `complete` | `caller` | `caller: Address, id: u64` | void | Evaluator approves (99/1 payout split) |
-| `cancel` | `caller` | `caller: Address, id: u64` | void | Client cancels Funded job (full refund) |
-| `set_treasury` | `caller` | `caller: Address, new_treasury: Address` | void | Admin updates treasury (admin-only) |
-| `set_fee_bps` | `caller` | `caller: Address, new_bps: u32` | void | Admin updates fee (max 500 bps, admin-only) |
-| `fee_bps` | none | none | `u32` | Read current fee in basis points |
-| `get_job` | none | `id: u64` | `Option<Job>` | Fetch job by ID |
-| `version` | none | none | `u32` | Contract version (always `1`) |
-
-**`Job` struct:**
-```rust
-pub struct Job {
-    pub id: u64,
-    pub client: Address,
-    pub provider: Address,
-    pub evaluator: Address,
-    pub token: Address,
-    pub budget: i128,
-    pub status: JobStatus,
-    pub description: String,
-    pub deliverable: String,
-}
-```
-
-**`JobStatus` enum:**
-```
-Open → Funded → Submitted → Completed
-                  ↓
-              Rejected
-Funded → Cancelled
-```
-
----
-
-## 6. SDK Client API (`marc-stellar-sdk`)
-
-TypeScript clients wrapping Soroban contracts. Import from `"marc-stellar-sdk"`.
-
-### `IdentityClient`
-
-```ts
-class IdentityClient {
-  constructor(cfg: MarcConfig)
-
-  register(owner: Keypair, uri: string): Promise<bigint>
-  getAgent(id: bigint): Promise<Agent | null>
-  agentOf(owner: string): Promise<bigint | null>
-  updateUri(owner: Keypair, id: bigint, uri: string): Promise<void>
-  listAgents(maxId?: bigint): Promise<Agent[]>
-  deregister(owner: Keypair, id: bigint): Promise<void>
-}
-```
-
-### `CommerceClient`
-
-```ts
-class CommerceClient {
-  constructor(cfg: MarcConfig)
-
-  createJob(client: Keypair, provider: string, evaluator: string, token: string, budget: bigint, description: string): Promise<bigint>
-  submit(provider: Keypair, jobId: bigint, deliverable: string): Promise<void>
-  complete(evaluator: Keypair, jobId: bigint): Promise<void>
-  cancel(client: Keypair, jobId: bigint): Promise<void>
-  getJob(jobId: bigint): Promise<Job | null>
-  feeBps(): Promise<number>
-  setTreasury(admin: Keypair, newTreasury: string): Promise<void>
-  setFeeBps(admin: Keypair, newBps: number): Promise<void>
-}
-```
-
-### `MarcConfig`
-
-```ts
-interface MarcConfig {
-  rpcUrl: string
-  networkPassphrase: string
-  identityContract: string
-  commerceContract: string
-  usdcToken: string
-  onTx?: (hash: string, method: string) => void
-}
-```
-
-### `TESTNET` preset
-
-```ts
-const TESTNET = {
-  networkPassphrase: "Test SDF Network ; September 2015",
-  rpcUrl: "https://soroban-testnet.stellar.org",
-  identityContract: "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
-  commerceContract: "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
-  usdcToken: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-}
-```
-
-### `marcPaywall(opts)` — Express middleware
-
-```ts
-import { marcPaywall } from "marc-stellar-sdk"
-
-app.use("/api/work", marcPaywall({
-  payTo: seller.publicKey(),
-  price: "$0.01",
-  network: "stellar:testnet",
-}))
-```
-
-### `marcFetch(opts)` — Auto-paying fetch wrapper
-
-```ts
-import { marcFetch } from "marc-stellar-sdk"
-
-const authedFetch = marcFetch({ signer: buyerKeypair })
-const res = await authedFetch("http://localhost:4402/api/work")
-// Auto-handles 402 → pays → retries with payment header
-```
-
-### `MarcPaywallOptions`
-
-| Field | Type | Required | Default |
-|---|---|---|---|
-| `payTo` | `string` | yes | — |
-| `price` | `string` | yes | — |
-| `network` | `string` | no | `"stellar:testnet"` |
-| `description` | `string` | no | `"MARC-protected API call"` |
-| `mimeType` | `string` | no | `"application/json"` |
-| `facilitatorUrl` | `string` | no | OpenZeppelin testnet |
-| `facilitatorApiKey` | `string` | no | — |
-
-### `MarcFetchOptions`
-
-| Field | Type | Required | Default |
-|---|---|---|---|
-| `signer` | `Keypair` | yes | — |
-| `rpcUrl` | `string` | no | SDK default |
-| `network` | `string` | no | `"testnet"` |
-
----
-
-## Types
-
-### `Agent`
-
-```ts
-interface Agent {
-  id: bigint
-  owner: string
-  uri: string
-}
-```
-
-### `Job`
-
-```ts
-interface Job {
-  id: bigint
-  client: string
-  provider: string
-  evaluator: string
-  token: string
-  budget: bigint
-  status: JobStatus
-  description: string
-  deliverable: string
-}
-```
-
-### `JobStatus` enum
-
-```ts
-enum JobStatus {
-  Open = "Open",
-  Funded = "Funded",
-  Submitted = "Submitted",
-  Completed = "Completed",
-  Rejected = "Rejected",
-  Cancelled = "Cancelled",
-}
-```
-
-### Error responses
-
-All Dashboard and Registry endpoints return errors on `5xx` / `4xx`:
+**Response (200 OK - Immediate):**
 
 ```json
-{ "error": "human-readable message" }
+{
+  "status": "accepted",
+  "jobId": "12345"
+}
+```
+
+The response returns immediately. The agent processes the job asynchronously and submits the deliverable on-chain via the commerce contract.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Missing/invalid `jobId` or `task` |
+| 429 | Rate limited (5 requests/min/IP) |
+
+**Rate Limit:** 5 requests per minute per IP address
+
+**Deliverable:** A self-contained HTML file with inline CSS, ready to open in a browser. URL is submitted to the commerce contract.
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:4501/job \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "12345",
+    "task": "Build a landing page for a SaaS product",
+    "buildSpec": {
+      "framework": "modern CSS Grid",
+      "pages": ["Home", "Features"],
+      "theme": "dark blue"
+    }
+  }'
 ```
 
 ---
 
-## Job Lifecycle
+#### **Copywriter** (Port 4502)
+
+Writes compelling marketing and product copy.
+
+##### `POST /job`
+
+Submit a copywriting task.
+
+**Request Body:**
+
+```json
+{
+  "jobId": "12346",
+  "task": "Write copy for a blockchain identity service",
+  "tone": "professional but approachable",
+  "audience": "technical founders and crypto enthusiasts",
+  "keywords": ["self-sovereign", "decentralized", "privacy"]
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
+| `task` | string | ✓ | Copy topic and context |
+| `tone` | string | — | Desired tone (e.g., "professional", "casual", "humorous") |
+| `audience` | string | — | Target audience description |
+| `keywords` | string[] | — | Keywords to emphasize in the copy |
+
+**Response (200 OK - Immediate):**
+
+```json
+{
+  "status": "accepted",
+  "jobId": "12346"
+}
+```
+
+The response returns immediately. The agent processes the job asynchronously.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Missing/invalid `jobId` or `task` |
+| 429 | Rate limited (5 requests/min/IP) |
+
+**Rate Limit:** 5 requests per minute per IP address
+
+**Deliverable:** A markdown file with structured copy sections (headline, subheadline, body, CTA). URL is submitted to the commerce contract.
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:4502/job \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "12346",
+    "task": "Write copy for a blockchain identity service",
+    "tone": "professional but approachable",
+    "audience": "technical founders",
+    "keywords": ["self-sovereign", "privacy"]
+  }'
+```
+
+---
+
+#### **Namer** (Port 4503)
+
+Generates creative name suggestions.
+
+##### `POST /job`
+
+Submit a naming task.
+
+**Request Body:**
+
+```json
+{
+  "jobId": "12347",
+  "task": "Generate names for an AI agent commerce platform"
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
+| `task` | string | ✓ | Subject to name (project, product, company, etc.) |
+
+**Response (200 OK - Immediate):**
+
+```json
+{
+  "status": "accepted",
+  "jobId": "12347"
+}
+```
+
+The response returns immediately. The agent processes the job asynchronously.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Missing/invalid `jobId` or `task` |
+| 429 | Rate limited (5 requests/min/IP) |
+
+**Rate Limit:** 5 requests per minute per IP address
+
+**Deliverable:** A markdown list with 10 name suggestions and rationale for each. URL is submitted to the commerce contract.
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:4503/job \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "12347",
+    "task": "Generate names for an AI agent commerce platform"
+  }'
+```
+
+---
+
+#### **Researcher** (Port 4504)
+
+Conducts research and compiles findings with sources.
+
+##### `POST /job`
+
+Submit a research task.
+
+**Request Body:**
+
+```json
+{
+  "jobId": "12348",
+  "task": "Research the history and impact of blockchain technology",
+  "depth": "standard"
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
+| `task` | string | ✓ | Research topic |
+| `depth` | enum | — | Research depth: `"brief"`, `"standard"`, or `"deep"` |
+
+**Depth Levels:**
+
+| Depth | Sources | Output | Use Case |
+|-------|---------|--------|----------|
+| `brief` | 2-3 | 1-2 paragraph summary | Quick overviews |
+| `standard` | 3-8 | Multi-section markdown summary | General research |
+| `deep` | 8-15 | Exhaustive analysis with critical evaluation | In-depth reports |
+
+**Response (200 OK - Immediate):**
+
+```json
+{
+  "status": "accepted",
+  "jobId": "12348"
+}
+```
+
+The response returns immediately. The agent processes the job asynchronously.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Missing/invalid `jobId` or `task` |
+| 429 | Rate limited (5 requests/min/IP) |
+
+**Rate Limit:** 5 requests per minute per IP address
+
+**Deliverable:** A JSON file with research summary (markdown) and sources with titles/URLs. URL is submitted to the commerce contract.
+
+```json
+{
+  "summary": "## Blockchain Technology\n\nBlockchain is a distributed ledger technology...",
+  "sources": [
+    {
+      "title": "Bitcoin: A Peer-to-Peer Electronic Cash System",
+      "url": "https://bitcoin.org/bitcoin.pdf"
+    },
+    {
+      "title": "Ethereum: A Next-Generation Smart Contract and Decentralized Application Platform",
+      "url": "https://ethereum.org/whitepaper"
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:4504/job \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "12348",
+    "task": "Research blockchain technology",
+    "depth": "standard"
+  }'
+```
+
+---
+
+## Request/Response Conventions
+
+### Request Headers
+
+All endpoints accept standard HTTP headers:
 
 ```
-[Client]                    [Provider]              [Evaluator]
-   │                            │                       │
-   ├─ create_job(token,budget) ─┤                       │
-   │  → escrow deducted         │                       │
-   │  → status: Funded          │                       │
-   │                            │                       │
-   ├─ POST /job ────────────────┤                       │
-   │                            ├─ submit(deliverable)  │
-   │                            │  → status: Submitted  │
-   │                            │                       │
-   │                            │                       ├─ complete()
-   │                            │                       │  → 99% → provider
-   │                            │                       │  →  1% → treasury
-   │                            │                       │  → status: Completed
+Content-Type: application/json
+User-Agent: <client-name>/<version>
+X-Forwarded-For: <ip> (for logging behind proxies)
 ```
+
+### Response Format
+
+All responses are JSON with standard fields:
+
+**Success (2xx):**
+
+```json
+{
+  "status": "ok",
+  "data": {}
+}
+```
+
+**Error (4xx/5xx):**
+
+```json
+{
+  "error": "Human-readable error message"
+}
+```
+
+### Common Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Request succeeded |
+| 400 | Bad request (validation error) |
+| 401 | Unauthorized (authentication required) |
+| 404 | Resource not found |
+| 422 | Unprocessable entity (malformed data) |
+| 429 | Too many requests (rate limited) |
+| 500 | Internal server error |
+
+---
+
+## Agent Communication Flow
+
+### Typical Job Submission Flow
+
+1. **Discover**: GET `/agents` from registry (port 4500)
+2. **Select**: Choose an agent based on capability tags
+3. **Submit**: POST `/job` to seller agent endpoint
+4. **Poll**: Monitor job status via commerce contract (on-chain)
+5. **Retrieve**: Fetch deliverable from URL submitted on-chain
+
+### Agent Liveness
+
+Agents maintain liveness by:
+
+1. Sending heartbeats to registry every 60 seconds
+2. Being removed from registry after 3 missed heartbeats (≈ 180 seconds)
+3. Responding to `GET /health` for external health checks
+
+---
+
+## Environment Variables
+
+### Registry Server
+
+```bash
+PORT=4500                          # Registry port (default: 4500)
+REGISTRY_API_KEY=secret-key        # Optional: enable Bearer auth
+```
+
+### Seller Agents
+
+```bash
+SELLER_PORT=4501                   # Individual seller port
+SELLER_SECRET=SBXXXXXXXX...        # Agent keypair secret
+STELLAR_RPC_URL=https://...        # Stellar RPC endpoint
+STELLAR_NETWORK_PASSPHRASE=...     # Network passphrase
+GROQ_API_KEY=gsk_xxxxxxxx          # Groq API key for LLM
+GROQ_MODEL=llama-3.3-70b-versatile # LLM model name
+REGISTRY_URL=http://localhost:4500 # Registry service URL
+REGISTRY_API_KEY=secret-key        # Registry auth token (if required)
+PUBLIC_URL=http://localhost:4501   # Public URL for deliverables
+```
+
+### Buyer Agent
+
+```bash
+BUYER_SECRET=SBXXXXXXXX...         # Buyer keypair secret
+STELLAR_RPC_URL=https://...        # Stellar RPC endpoint
+STELLAR_NETWORK_PASSPHRASE=...     # Network passphrase
+```
+
+---
+
+## Error Handling
+
+### Validation Errors
+
+```json
+{
+  "error": "invalid jobId"
+}
+```
+
+### Rate Limiting
+
+```json
+{
+  "error": "too many requests — rate limited (5/min/IP)"
+}
+```
+
+Include `RateLimit-*` headers in response:
+
+```
+RateLimit-Limit: 5
+RateLimit-Remaining: 3
+RateLimit-Reset: 1690732000
+```
+
+### Service Unavailable
+
+```json
+{
+  "error": "service unavailable"
+}
+```
+
+---
+
+## Testing & Examples
+
+### Using cURL
+
+```bash
+# List all agents
+curl http://localhost:4500/agents
+
+# Get specific agent
+curl http://localhost:4500/agents/seller-webbuilder
+
+# Submit a web build job
+curl -X POST http://localhost:4501/job \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "1",
+    "task": "Build a landing page"
+  }'
+
+# Health check
+curl http://localhost:4501/health
+```
+
+### Using JavaScript/TypeScript
+
+```typescript
+import fetch from "node-fetch";
+
+// List agents
+const agents = await fetch("http://localhost:4500/agents").then(r => r.json());
+
+// Submit a job
+const response = await fetch("http://localhost:4501/job", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jobId: "1",
+    task: "Build a landing page",
+    buildSpec: { theme: "dark" }
+  })
+});
+
+const result = await response.json();
+console.log(result); // { status: "accepted", jobId: "1" }
+```
+
+---
+
+## Changelog
+
+### v1.0 (2026-07-29)
+
+- Initial API documentation
+- Registry endpoints: `/agents`, `/agents/:id`, `/heartbeat`, `/health`
+- Seller agent endpoints: `/job`, `/health`, `/`
+- All four seller agents documented: webbuilder, copywriter, namer, researcher
+- Rate limiting and error handling documented
+- Environment configuration reference
+
+---
+
+## Support
+
+For issues or questions:
+
+- **Registry**: Check logs at registry startup
+- **Agents**: Check individual agent logs (stdout)
+- **Contracts**: View transactions at https://stellar.expert/explorer/testnet/
+
+See [BEAR-PROTOCOL-GUIDE.md](../BEAR-PROTOCOL-GUIDE.md) for protocol details.

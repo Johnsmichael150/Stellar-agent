@@ -773,3 +773,267 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   .playground-iframe { height: 420px; }
   .diagram-wrap { padding: 16px 8px; }
 }
+
+/* ── Consent Banner ── */
+.consent-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 24px;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.consent-content {
+  max-width: 900px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.consent-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.consent-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.consent-description {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.consent-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.consent-actions .btn {
+  white-space: nowrap;
+  font-size: 14px;
+  padding: 10px 20px;
+}
+
+/* ── Responsive consent banner ── */
+@media (max-width: 768px) {
+  .consent-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .consent-actions {
+    flex-direction: column;
+  }
+
+  .consent-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .consent-banner {
+    padding: 16px;
+  }
+
+  .consent-content {
+    gap: 12px;
+  }
+
+  .consent-title {
+    font-size: 15px;
+  }
+
+  .consent-description {
+    font-size: 13px;
+  }
+
+  .consent-actions .btn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+}
+
+/* ── Fonts loaded state ── */
+html.fonts-loaded {
+  font-family: var(--font);
+}
+
+/* ── 404 Error Page ── */
+.error-page {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px 40px;
+  overflow: hidden;
+}
+
+.error-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+  opacity: 0.5;
+}
+
+.error-bg .geodesic {
+  width: 500px;
+  height: 500px;
+  max-width: 80vw;
+}
+
+.error-container {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+}
+
+.error-code {
+  font-size: 120px;
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 24px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+.error-title {
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 16px;
+  line-height: 1.2;
+}
+
+.error-description {
+  font-size: 18px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.error-hint {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.error-actions .btn {
+  min-width: 140px;
+}
+
+/* ── Responsive 404 page ── */
+@media (max-width: 768px) {
+  .error-page {
+    padding: 40px 20px 32px;
+  }
+
+  .error-code {
+    font-size: 80px;
+    margin-bottom: 20px;
+  }
+
+  .error-title {
+    font-size: 32px;
+    margin-bottom: 12px;
+  }
+
+  .error-description,
+  .error-hint {
+    font-size: 15px;
+    margin-bottom: 20px;
+  }
+
+  .error-actions {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .error-page {
+    padding: 40px 16px 24px;
+    min-height: auto;
+  }
+
+  .error-bg .geodesic {
+    width: 300px;
+    height: 300px;
+  }
+
+  .error-code {
+    font-size: 60px;
+    margin-bottom: 16px;
+  }
+
+  .error-title {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .error-description,
+  .error-hint {
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+
+  .error-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .error-actions .btn {
+    min-width: unset;
+    width: 100%;
+  }
+}

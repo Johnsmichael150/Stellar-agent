@@ -11,10 +11,18 @@
        and dashboard are deployed to separate origins. -->
   <meta name="marc-dashboard-url" content="/app">
 
+  <!-- External fonts (Google Fonts may set cookies in some regions). Defer loading until
+       consent is given. See consent-banner.js for implementation. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <!-- Google Fonts Inter font will be loaded dynamically after consent -->
+  <script>
+    // Fallback system fonts until external fonts are loaded
+    if (document.documentElement.style.fontFamily === '') {
+      document.documentElement.style.fontFamily = '-apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+    }
+  </script>
 </head>
 <body>
   <!-- Navigation -->
@@ -337,6 +345,28 @@ const result = await marcFetch(
     </div>
   </footer>
 
+  <!-- Consent Banner for external resources (fonts, analytics) -->
+  <div id="consent-banner" class="consent-banner" role="alertdialog" aria-live="polite" aria-label="Cookie and consent banner">
+    <div class="consent-content">
+      <div class="consent-text">
+        <h3 class="consent-title">Privacy & Cookies</h3>
+        <p class="consent-description">
+          We use external fonts (Google Fonts) and analytics to improve your experience. 
+          These may set cookies in some regions. You can always change your preferences.
+        </p>
+      </div>
+      <div class="consent-actions">
+        <button id="consent-reject" class="btn btn-secondary" aria-label="Reject external resources">
+          Reject All
+        </button>
+        <button id="consent-accept" class="btn btn-primary" aria-label="Accept external resources">
+          Accept All
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="consent-banner.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

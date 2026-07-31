@@ -9,6 +9,8 @@ pub enum Error {
     SelfEscrow = 1,
     /// provider == evaluator: the party delivering work cannot also approve it.
     InvalidParties = 2,
+    /// The contract is paused; no state-changing operations are allowed.
+    ContractPaused = 3,
 }
 
 /// Lifecycle states for a job escrow.
@@ -53,6 +55,8 @@ enum DataKey {
     Admin,
     FeeBps,
     Version,
+    /// #29 — emergency pause flag. Stored as bool; absent == not paused.
+    Paused,
 }
 
 const DEFAULT_FEE_BPS: u32 = 100; // 1%
@@ -61,6 +65,14 @@ const BPS_DENOM: i128 = 10_000;
 const REFUND_TIMEOUT_SECS: u64 = 7 * 24 * 3600; // 7 days
 
 // --- Events ---
+
+/// Emitted when the contract is successfully initialized.
+#[contractevent]
+pub struct Initialized {
+    #[topic]
+    pub admin: Address,
+    pub treasury: Address,
+}
 
 /// Emitted when a job is created and funded.
 #[contractevent]
@@ -134,11 +146,51 @@ pub struct ReInitialized {
 #[contract]
 pub struct AgenticCommerceContract;
 
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+impl AgenticCommerceContract {
+    /// Panics with `ContractPaused` if the `Paused` flag is set. Call this at
+    /// the top of every state-changing entry point (#29).
+    fn require_not_paused(env: &Env) {
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        if paused {
+            panic_with_error!(env, Error::ContractPaused);
+        }
+    }
+
+    /// Compute the platform fee for a given budget using safe arithmetic (#28).
+    ///
+    /// The naive `budget * fee_bps / BPS_DENOM` risks overflowing i128 for
+    /// very large budgets (e.g. 10^30 atomic units × 500 bps). We divide
+    /// first to keep the intermediate value small, then multiply.  A small
+    /// amount of precision is lost (at most `fee_bps - 1` stroops, i.e. < 500)
+    /// which is acceptable for a platform fee calculation.
+    ///
+    /// We still use `checked_mul` after the division as a defence-in-depth
+    /// guard — in practice the result of `budget / BPS_DENOM` is at most
+    /// i128::MAX / BPS_DENOM which multiplied by MAX_FEE_BPS (500) is still
+    /// well within i128 range.
+    fn compute_fee(budget: i128, fee_bps: u32) -> i128 {
+        (budget / BPS_DENOM)
+            .checked_mul(fee_bps as i128)
+            .expect("fee overflow")
+    }
+}
+
 #[contractimpl]
 impl AgenticCommerceContract {
     /// Initializer. Sets admin, treasury, default fee (1%), and job id counter.
     /// Panics if the contract has already been initialized — use `re_init` to
     /// update admin or treasury after the first init.
+    ///
+    /// Emits an `Initialized` event (#31) so off-chain indexers can detect
+    /// when and by whom the contract was set up.
     pub fn init(env: Env, admin: Address, treasury: Address) {
         admin.require_auth();
         if env.storage().instance().has(&DataKey::Admin) {
@@ -148,6 +200,13 @@ impl AgenticCommerceContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         env.storage().instance().set(&DataKey::FeeBps, &DEFAULT_FEE_BPS);
+
+        // #31 — emit Initialized event so indexers can track contract setup.
+        Initialized {
+            admin,
+            treasury,
+        }
+        .publish(&env);
     }
 
     /// Re-initialize admin and treasury. Only the current admin may call this.
@@ -169,6 +228,47 @@ impl AgenticCommerceContract {
         }
         .publish(&env);
     }
+
+    // -----------------------------------------------------------------------
+    // #29 — Emergency pause / unpause
+    // -----------------------------------------------------------------------
+
+    /// Admin-only: halt all state-changing entry points immediately.
+    /// Emits a `Paused` event. Idempotent (pausing an already-paused contract
+    /// is a no-op that still succeeds and still emits the event).
+    pub fn emergency_pause(env: Env, caller: Address) {
+        caller.require_auth();
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != admin {
+            panic!("not admin");
+        }
+        env.storage().instance().set(&DataKey::Paused, &true);
+        Paused {
+            admin: caller,
+            timestamp: env.ledger().timestamp(),
+        }
+        .publish(&env);
+    }
+
+    /// Admin-only: resume normal contract operation.
+    /// Emits an `Unpaused` event. Idempotent.
+    pub fn emergency_unpause(env: Env, caller: Address) {
+        caller.require_auth();
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != admin {
+            panic!("not admin");
+        }
+        env.storage().instance().set(&DataKey::Paused, &false);
+        Unpaused {
+            admin: caller,
+            timestamp: env.ledger().timestamp(),
+        }
+        .publish(&env);
+    }
+
+    // -----------------------------------------------------------------------
+    // Core state-changing entry points (all guarded by require_not_paused)
+    // -----------------------------------------------------------------------
 
     /// Create a job and escrow `budget` from the `client_addr` into the contract.
     /// Returns the assigned sequential job id.
@@ -195,6 +295,7 @@ impl AgenticCommerceContract {
         budget: i128,
         description: String,
     ) -> u64 {
+        Self::require_not_paused(&env); // #29
         client_addr.require_auth();
         if !env.storage().instance().has(&DataKey::Admin) {
             panic!("not initialized");
@@ -253,6 +354,7 @@ impl AgenticCommerceContract {
 
     /// Provider submits the deliverable. Flips status Funded → Submitted.
     pub fn submit(env: Env, caller: Address, id: u64, deliverable: String) {
+        Self::require_not_paused(&env); // #29
         caller.require_auth();
         let mut job: Job = env
             .storage()
@@ -277,8 +379,13 @@ impl AgenticCommerceContract {
         .publish(&env);
     }
 
-    /// Evaluator approves the deliverable. Splits budget 99/1 between provider and treasury.
+    /// Evaluator approves the deliverable. Splits budget between provider and
+    /// treasury according to the current `fee_bps` setting.
+    ///
+    /// Fee is computed as `(budget / BPS_DENOM) * fee_bps` (divide-first order)
+    /// to avoid i128 overflow for extremely large budgets (#28).
     pub fn complete(env: Env, caller: Address, id: u64) {
+        Self::require_not_paused(&env); // #29
         caller.require_auth();
         let mut job: Job = env
             .storage()
@@ -291,13 +398,9 @@ impl AgenticCommerceContract {
         if job.status != JobStatus::Submitted {
             panic!("invalid status");
         }
+        // #28 — overflow-safe fee: divide first, then multiply.
         let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap();
-        let fee: i128 = job
-            .budget
-            .checked_mul(fee_bps as i128)
-            .expect("fee overflow")
-            .checked_div(BPS_DENOM)
-            .expect("fee overflow");
+        let fee: i128 = Self::compute_fee(job.budget, fee_bps);
         let payout: i128 = job.budget - fee;
 
         job.status = JobStatus::Completed;
@@ -327,6 +430,7 @@ impl AgenticCommerceContract {
     /// Refunds `budget - released` so it correctly handles any future partial-settlement
     /// extensions without over-refunding.
     pub fn cancel(env: Env, caller: Address, id: u64) {
+        Self::require_not_paused(&env); // #29
         caller.require_auth();
         let mut job: Job = env
             .storage()
@@ -391,14 +495,13 @@ impl AgenticCommerceContract {
 
     /// Read-only helper: estimate the platform fee for a given budget and fee rate.
     ///
-    /// Returns `budget * fee_bps / 10_000`. No state is read or written.
+    /// Returns `(budget / 10_000) * fee_bps`. No state is read or written.
     /// Intended for frontends that want to display the estimated fee before
     /// calling `create_job`.
     pub fn simulate_job_fee(_env: Env, budget: i128, fee_bps: u32) -> i128 {
-        budget
+        // #28 — divide-first to avoid overflow on very large budgets.
+        (budget / BPS_DENOM)
             .checked_mul(fee_bps as i128)
-            .unwrap_or(0)
-            .checked_div(BPS_DENOM)
             .unwrap_or(0)
     }
 
@@ -420,6 +523,7 @@ impl AgenticCommerceContract {
 
     /// Buyer claims a full refund if provider never submitted and the timeout has passed.
     pub fn claim_refund(env: Env, caller: Address, id: u64) {
+        Self::require_not_paused(&env); // #29
         caller.require_auth();
         let mut job: Job = env
             .storage()
@@ -453,6 +557,14 @@ impl AgenticCommerceContract {
             job_id: id,
         }
         .publish(&env);
+    }
+
+    /// Read-only: returns true if the contract is currently paused.
+    pub fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
     }
 }
 

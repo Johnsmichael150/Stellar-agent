@@ -8,6 +8,7 @@ import {
   Address,
   xdr,
   Account,
+  rpc,
 } from "@stellar/stellar-sdk";
 import type { Agent, MarcConfig } from "./types.js";
 import { BaseClient } from "./baseClient.js";
@@ -22,11 +23,8 @@ import { BaseClient } from "./baseClient.js";
 export class IdentityClient extends BaseClient {
   private contract: Contract;
 
-  constructor(private cfg: MarcConfig) {
-    this.server = new rpc.Server(cfg.rpcUrl, {
-      allowHttp: cfg.rpcUrl.startsWith("http://"),
-      timeout: 15000,
-    });
+  constructor(cfg: MarcConfig) {
+    super(cfg);
     this.contract = new Contract(cfg.identityContract);
   }
 
@@ -43,7 +41,9 @@ export class IdentityClient extends BaseClient {
    * @param owner - The owner's Keypair. Used both as the on-chain `owner`
    *                address and to sign the transaction.
    * @param uri   - Metadata URI for the agent (e.g. a DID document URL).
-   * @returns The assigned on-chain agent ID as a `bigint`.
+   * @returns The assigned on-chain agent ID as a `bigint`, decoded directly
+   *          from the contract's `register()` return value. Callers never
+   *          need a follow-up `agentOf()` query to learn the id (#274).
    */
   async register(owner: Keypair, uri: string): Promise<bigint> {
     const op = this.contract.call(

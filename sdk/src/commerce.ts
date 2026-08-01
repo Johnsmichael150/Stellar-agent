@@ -38,11 +38,8 @@ export const addrFromScVal = (v: xdr.ScVal): string => Address.fromScVal(v).toSt
 export class CommerceClient extends BaseClient {
   private contract: Contract;
 
-  constructor(private cfg: MarcConfig) {
-    this.server = new rpc.Server(cfg.rpcUrl, {
-      allowHttp: cfg.rpcUrl.startsWith("http://"),
-      timeout: 15000,
-    });
+  constructor(cfg: MarcConfig) {
+    super(cfg);
     this.contract = new Contract(cfg.commerceContract);
   }
 

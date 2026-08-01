@@ -96,6 +96,7 @@ const res = await fetch402("https://agent.example/api/summarize", {
 | `getAgent(agentId)` | Fetch an `Agent` record by numeric ID |
 | `agentOf(address)` | Look up the `Agent` registered to a Stellar address |
 | `updateUri(keypair, agentId, newUri)` | Update the metadata URI |
+| `updateOwner(keypair, agentId, newOwnerKeypair)` | Transfer the agent to a new wallet; requires signatures from both the current owner and `newOwnerKeypair` |
 | `deregister(keypair, agentId)` | Remove the agent registration |
 
 ### `CommerceClient`

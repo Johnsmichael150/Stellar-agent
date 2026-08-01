@@ -21,7 +21,7 @@ pub enum Error {
 }
 
 /// A registered agent in the MARC agent-identity registry.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 #[contracttype]
 pub struct Agent {
     pub id: u64,

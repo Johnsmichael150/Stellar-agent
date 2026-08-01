@@ -300,6 +300,26 @@ fn register_rejects_uri_longer_than_256_chars() {
     client.register(&alice, &uri);
 }
 
+// Issue #273 — next_id is u64, not u32, so it cannot realistically overflow
+// in practice. This test proves the guard exists and fires: force NextId to
+// u64::MAX directly in storage, then confirm register() panics instead of
+// wrapping around to 0 and colliding with agent id 0's storage key.
+#[test]
+#[should_panic(expected = "agent id overflow")]
+fn register_panics_instead_of_wrapping_when_next_id_overflows() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AgentIdentityContract, ());
+    let client = AgentIdentityContractClient::new(&env, &contract_id);
+
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::NextId, &u64::MAX);
+    });
+
+    let alice = Address::generate(&env);
+    client.register(&alice, &String::from_str(&env, "ipfs://alice.json"));
+}
+
 #[test]
 #[should_panic(expected = "metadata_uri too long")]
 fn update_uri_rejects_uri_longer_than_256_chars() {
@@ -549,5 +569,4 @@ fn get_agent_missing_does_not_bump_ttl() {
 
     // id 99 was never registered.
     assert_eq!(client.get_agent(&99u64), None);
-}
 }

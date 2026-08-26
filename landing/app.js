@@ -4,6 +4,38 @@
 
 document.addEventListener("DOMContentLoaded", () => {
 
+  // ── Theme toggle (dark/light mode) ──
+  // Reads from localStorage first, falls back to system preference.
+  const THEME_KEY = "marc-theme";
+  const root = document.documentElement;
+
+  function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function applyTheme(theme) {
+    root.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }
+
+  // Apply immediately to prevent flash
+  applyTheme(getPreferredTheme());
+
+  // Listen for system preference changes (only if user hasn't manually set one)
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+      applyTheme(e.matches ? "dark" : "light");
+    }
+  });
+
+  const themeToggle = document.getElementById("theme-toggle");
+  themeToggle?.addEventListener("click", () => {
+    const current = root.getAttribute("data-theme");
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+
   // ── Dashboard link base URL ──
   // Reads the configurable base path from the <meta name="marc-dashboard-url">
   // tag so this same markup works whether the dashboard is served from this
@@ -186,9 +218,13 @@ document.addEventListener("DOMContentLoaded", () => {
           diagramVisible = true;
           tick = 0;
           drawLoop();
+        } else if (!entry.isIntersecting && diagramVisible) {
+          // Pause animation when scrolled out of view to save CPU/GPU
+          diagramVisible = false;
+          cancelAnimationFrame(animationId);
         }
       });
-    }, { threshold: 0.2 });
+    }, { threshold: 0.1 });
     diagramObserver.observe(canvas);
 
     function easeOutCubic(t) {

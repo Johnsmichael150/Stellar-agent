@@ -41,6 +41,10 @@
       </div>
       <div class="nav-actions">
         <div id="lang-switch-container" class="lang-switch-container"></div>
+        <button class="icon-btn theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
         <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
           <span></span><span></span><span></span>
         </button>
@@ -61,7 +65,7 @@
       <div class="hero-bg" aria-hidden="true">
         <div class="grid-overlay"></div>
         <div class="geodesic">
-          <svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg" width="600" height="600" aria-hidden="true">
             <ellipse cx="300" cy="300" rx="260" ry="260" fill="none" stroke="#F97316" stroke-width="0.6" opacity="0.4"/>
             <ellipse cx="300" cy="300" rx="260" ry="100" fill="none" stroke="#F97316" stroke-width="0.5" opacity="0.3" transform="rotate(0 300 300)"/>
             <ellipse cx="300" cy="300" rx="260" ry="100" fill="none" stroke="#F97316" stroke-width="0.5" opacity="0.3" transform="rotate(60 300 300)"/>
@@ -111,7 +115,7 @@
 
         <!-- Animated protocol stack diagram (issue #303) -->
         <div class="diagram-wrap fade-in" aria-label="Animated diagram showing three protocol layers: Agent Identity, Agentic Commerce, and x402 Micropayments connected by arrows">
-          <canvas id="protocol-diagram" role="img" aria-label="Interactive protocol stack visualization"></canvas>
+          <canvas id="protocol-diagram" role="img" aria-label="Interactive protocol stack visualization" width="680" height="280"></canvas>
         </div>
 
         <div class="stack-grid">

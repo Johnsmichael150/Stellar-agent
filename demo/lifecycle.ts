@@ -12,10 +12,11 @@
  * so CI / dashboards catch facilitator regressions.
  */
 import "dotenv/config";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execFile, type ChildProcess } from "node:child_process";
 import * as readline from "node:readline";
 
 const STEP_MODE = process.argv.includes("--step");
+const CLEANUP_MODE = process.argv.includes("--cleanup");
 
 function pause(label: string): Promise<void> {
   if (!STEP_MODE) return Promise.resolve();
@@ -75,8 +76,31 @@ async function waitForHttpReady(url: string, timeoutMs = 30_000, intervalMs = 20
   throw new Error(`Timed out waiting for ${url} to become ready`);
 }
 
+/**
+ * Run the cleanup script to return demo tokens to treasury and deregister
+ * agent identities, so repeated runs start with clean wallets.
+ */
+async function runCleanup(): Promise<void> {
+  const scriptPath = new URL("../../scripts/cleanup-demo.sh", import.meta.url).pathname;
+  log("running cleanup — returning tokens to treasury...");
+  return new Promise((resolve, reject) => {
+    execFile("bash", [scriptPath], { cwd: import.meta.dirname }, (err, stdout, stderr) => {
+      if (stdout) process.stdout.write(stdout);
+      if (stderr) process.stderr.write(stderr);
+      if (err) {
+        log(`cleanup failed: ${err.message}`);
+        reject(err);
+      } else {
+        log("cleanup complete");
+        resolve();
+      }
+    });
+  });
+}
+
 async function main() {
   if (STEP_MODE) log("--step mode enabled: will pause between phases");
+  if (CLEANUP_MODE) log("--cleanup enabled: will return tokens after success");
 
   await pause("about to start seller-agent");
   log("starting seller-agent...");
@@ -146,6 +170,15 @@ async function main() {
   }
 
   log("SUCCESS — full lifecycle completed");
+
+  if (CLEANUP_MODE) {
+    try {
+      await runCleanup();
+    } catch {
+      log("WARN — cleanup failed, tokens remain on testnet wallets");
+    }
+  }
+
   process.exit(0);
 }
 

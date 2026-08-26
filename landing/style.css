@@ -25,6 +25,22 @@
   --shadow-card: 0 2px 8px rgba(0,0,0,0.04), 0 0 0 1px var(--border);
 }
 
+/* ── Dark theme (design-system.md tokens) ── */
+[data-theme="dark"] {
+  --bg: #0A0A0A;
+  --bg-elevated: #1A1A1A;
+  --border: #262626;
+  --text: #FAFAFA;
+  --text-muted: #9CA3AF;
+  --accent: #F97316;
+  --accent-soft: #2D1B0A;
+  --accent-strong: #FB923C;
+  --logo-yellow: #FFD60A;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.2), 0 0 0 1px var(--border);
+}
+
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; scroll-padding-top: 80px; -webkit-font-smoothing: antialiased; }
@@ -50,7 +66,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   top: 0; left: 0; right: 0;
   height: 72px;
   z-index: 100;
-  background: rgba(250, 250, 250, 0.85);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -93,6 +109,17 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   transition: color 0.2s, background 0.2s;
 }
 .icon-btn:hover { color: var(--text); background: var(--accent-soft); }
+
+/* ── Theme toggle ── */
+.theme-toggle .icon-sun { display: block; }
+.theme-toggle .icon-moon { display: none; }
+[data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+/* Prevent flash before JS runs — hide sun if user prefers dark */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: none; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: block; }
+}
 
 /* ── Language switcher (issue #259) ── */
 .lang-switch-container { display: flex; align-items: center; }
@@ -288,6 +315,14 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 /* ── Sections ── */
 .section {
   padding: 96px 0;
+}
+/* Optimize rendering: skip layout for off-screen sections until near viewport */
+.section + .section,
+.statement,
+.try-it-section,
+.contracts-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
 }
 .eyebrow {
   display: block;
@@ -768,7 +803,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
     position: absolute;
     top: 72px;
     left: 0; right: 0;
-    background: rgba(250, 250, 250, 0.98);
+    background: var(--bg-elevated);
     border-bottom: 1px solid var(--border);
     flex-direction: column;
     padding: 16px 24px;

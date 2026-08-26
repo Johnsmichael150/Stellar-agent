@@ -727,6 +727,9 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   .stack-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .steps-grid { grid-template-columns: repeat(2, 1fr); }
   .code-grid { grid-template-columns: 1fr; }
+  .nav-links { gap: 0; }
+  .nav-link { padding: 8px 10px; font-size: 13px; }
+  .nav-actions .icon-btn { display: none; }
 }
 @media (max-width: 768px) {
   .nav-links { display: none; }
@@ -745,11 +748,14 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   display: none;
   flex-direction: column;
   gap: 5px;
-  padding: 4px;
+  padding: 8px;
   cursor: pointer;
   order: -1;
-  margin-right: 8px;
+  margin-right: 4px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
 }
+.hamburger:hover { background: var(--accent-soft); }
 .hamburger span {
   display: block;
   width: 22px; height: 2px;
@@ -769,13 +775,17 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
     top: 72px;
     left: 0; right: 0;
     background: rgba(250, 250, 250, 0.98);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
     flex-direction: column;
-    padding: 16px 24px;
-    gap: 4px;
+    padding: 12px 24px 16px;
+    gap: 2px;
+    z-index: 99;
   }
   .nav-links.nav-open { display: flex; }
-  .nav-link { padding: 10px 0; font-size: 16px; }
+  .nav-link { padding: 12px 0; font-size: 16px; }
   .nav-actions .btn { display: none; }
   .nav-actions .icon-btn { display: none; }
 }

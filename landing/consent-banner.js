@@ -65,18 +65,32 @@ function loadExternalFonts() {
 }
 
 /**
- * Load analytics (Umami or similar)
- * Currently a no-op since no analytics script is deployed yet.
- * Add your analytics script here when ready.
+ * Load analytics (Umami — privacy-friendly, no cookies)
+ *
+ * Configure by setting the two env-style vars below, or by adding a
+ * <meta name="umami-website-id"> and <meta name="umami-script-url"> tag
+ * to the page <head>.  When neither is present analytics are silently skipped.
+ *
+ * Umami Cloud:  https://umami.is  — create an account, add a website, copy the
+ *   website ID from the tracking snippet.
+ * Self-hosted:  point script-url to your own Umami instance.
  */
 function loadAnalytics() {
-  // Placeholder for future analytics integration (Umami, etc.)
-  // Example:
-  // const script = document.createElement("script");
-  // script.defer = true;
-  // script.src = "https://analytics.example.com/script.js";
-  // script.async = true;
-  // document.head.appendChild(script);
+  const websiteId =
+    document.querySelector('meta[name="umami-website-id"]')?.content?.trim() ||
+    "";                       // <-- paste your Umami website ID here
+  const scriptUrl =
+    document.querySelector('meta[name="umami-script-url"]')?.content?.trim() ||
+    "https://analytics.umami.is/script.js";
+
+  if (!websiteId) return;     // no ID configured — skip silently
+
+  const script = document.createElement("script");
+  script.defer = true;
+  script.async = true;
+  script.src = `${scriptUrl}`;
+  script.setAttribute("data-website-id", websiteId);
+  document.head.appendChild(script);
 }
 
 /**

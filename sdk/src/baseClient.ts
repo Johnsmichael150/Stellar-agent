@@ -1,11 +1,4 @@
-import {
-  Keypair,
-  rpc,
-  TransactionBuilder,
-  BASE_FEE,
-  xdr,
-  Account,
-} from "@stellar/stellar-sdk";
+import { Keypair, rpc, TransactionBuilder, BASE_FEE, xdr, Account } from "@stellar/stellar-sdk";
 import type { MarcConfig } from "./types.js";
 
 /**
@@ -105,7 +98,10 @@ export abstract class BaseClient {
    * Throws on RPC/simulation errors so callers can distinguish network failures
    * from a genuine not-found (which returns `null`).
    */
-  protected async simulateOption<T>(op: xdr.Operation, decode: (v: xdr.ScVal) => T): Promise<T | null> {
+  protected async simulateOption<T>(
+    op: xdr.Operation,
+    decode: (v: xdr.ScVal) => T,
+  ): Promise<T | null> {
     const ephemeral = Keypair.random();
     const dummy = new Account(ephemeral.publicKey(), "0");
     const tx = new TransactionBuilder(dummy, {

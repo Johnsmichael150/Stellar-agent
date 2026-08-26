@@ -20,9 +20,7 @@ const CONTRACT_CACHE_TTL = 30_000; // 30s TTL for RPC getters like feeBps()/vers
 export const events = new EventEmitter();
 
 /** Find the max existing ID via exponential probe + binary search */
-async function findMaxId(
-  getter: (id: bigint) => Promise<unknown | null>,
-): Promise<number> {
+async function findMaxId(getter: (id: bigint) => Promise<unknown | null>): Promise<number> {
   // Exponential probe
   let probe = 1;
   while (probe <= 1024) {
@@ -51,10 +49,7 @@ async function findMaxId(
 }
 
 /** Fetch all items 1..max in parallel batches */
-async function fetchAll<T>(
-  maxId: number,
-  getter: (id: bigint) => Promise<T | null>,
-): Promise<T[]> {
+async function fetchAll<T>(maxId: number, getter: (id: bigint) => Promise<T | null>): Promise<T[]> {
   const BATCH = 10;
   const results: T[] = [];
   for (let start = 1; start <= maxId; start += BATCH) {

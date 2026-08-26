@@ -39,7 +39,7 @@
     var btnWrapper = document.getElementById("swk-button-wrapper");
     if (btnWrapper) StellarWalletsKit.createButton(btnWrapper);
     // Listen for wallet state changes
-    StellarWalletsKit.on(KitEventType.STATE_UPDATED, function(event) {
+    StellarWalletsKit.on(KitEventType.STATE_UPDATED, function (event) {
       var addr = event.payload && event.payload.address;
       if (addr && addr.length > 10) {
         wallet.connected = true;
@@ -62,7 +62,11 @@
             const n = await api.getNetwork();
             // freighter may return 'TESTNET'|'PUBLIC' or a passphrase string
             if (String(n).toLowerCase().includes("test")) net = "testnet";
-            else if (String(n).toLowerCase().includes("pub") || String(n).toLowerCase().includes("main")) net = "mainnet";
+            else if (
+              String(n).toLowerCase().includes("pub") ||
+              String(n).toLowerCase().includes("main")
+            )
+              net = "mainnet";
           } catch (e) {}
         }
         wallet.connected = true;
@@ -93,13 +97,15 @@
     if (token) {
       fetch("/api/auth/logout", {
         method: "POST",
-        headers: { "Authorization": "Bearer " + token },
-      }).catch(function() {});
+        headers: { Authorization: "Bearer " + token },
+      }).catch(function () {});
       window.__sessionToken = null;
     }
     // Tell SWK to disconnect if the API supports it
     if (swkReady && StellarWalletsKit && typeof StellarWalletsKit.disconnect === "function") {
-      try { StellarWalletsKit.disconnect(); } catch (e) {}
+      try {
+        StellarWalletsKit.disconnect();
+      } catch (e) {}
     }
     updateWalletUI();
     // Re-show the SWK connect button
@@ -122,16 +128,31 @@
         addrText.textContent = wallet.publicKey.slice(0, 6) + "..." + wallet.publicKey.slice(-4);
         // Make address clickable to copy
         var addrDisplay = document.getElementById("wallet-addr-display");
-        if (addrDisplay) addrDisplay.onclick = function() { copyToClipboard(wallet.publicKey); };
+        if (addrDisplay)
+          addrDisplay.onclick = function () {
+            copyToClipboard(wallet.publicKey);
+          };
       }
       if (modeLabel) {
-        const netLabel = wallet.network === "mainnet" ? "Mainnet" : wallet.network === "testnet" ? "Testnet" : "Connected";
+        const netLabel =
+          wallet.network === "mainnet"
+            ? "Mainnet"
+            : wallet.network === "testnet"
+              ? "Testnet"
+              : "Connected";
         modeLabel.textContent = "Connected — " + netLabel;
       }
       // Update sidebar network badge
       try {
         var nb = document.getElementById("network-badge");
-        if (nb) nb.innerHTML = '<span class="badge-dot"></span>' + (wallet.network === "mainnet" ? "Stellar Mainnet" : wallet.network === "testnet" ? "Stellar Testnet" : "Unknown Network");
+        if (nb)
+          nb.innerHTML =
+            '<span class="badge-dot"></span>' +
+            (wallet.network === "mainnet"
+              ? "Stellar Mainnet"
+              : wallet.network === "testnet"
+                ? "Stellar Testnet"
+                : "Unknown Network");
       } catch (e) {}
       // Hide the SWK connect button once connected
       if (btnWrapper) btnWrapper.style.display = "none";
@@ -154,10 +175,18 @@
     try {
       const api = window.freighterApi || window.freighter;
       if (api && typeof api.signTransaction === "function") {
-        if (wallet.network === "mainnet") throw new Error("Freighter is on Mainnet — dashboard blocks mainnet signing to avoid real transactions");
+        if (wallet.network === "mainnet")
+          throw new Error(
+            "Freighter is on Mainnet — dashboard blocks mainnet signing to avoid real transactions",
+          );
         const sigRes = await api.signTransaction(buildRes.xdr);
         // Accept multiple possible response shapes
-        const signedXdr = sigRes.signedTransaction || sigRes.signedTx || sigRes.signedTxXdr || sigRes.signedXdr || sigRes;
+        const signedXdr =
+          sigRes.signedTransaction ||
+          sigRes.signedTx ||
+          sigRes.signedTxXdr ||
+          sigRes.signedXdr ||
+          sigRes;
         return await apiClientSubmit(signedXdr);
       }
     } catch (e) {
@@ -219,7 +248,9 @@
 
   function statusBadge(status) {
     const safe = escapeHtml(status);
-    return '<span class="status-badge status-' + safe + '"><span class="dot"></span>' + safe + '</span>';
+    return (
+      '<span class="status-badge status-' + safe + '"><span class="dot"></span>' + safe + "</span>"
+    );
   }
 
   // ── Toast ──
@@ -236,7 +267,10 @@
   function showTxOverlay(text) {
     const overlay = document.getElementById("tx-overlay");
     const modal = overlay.querySelector(".tx-modal");
-    modal.innerHTML = '<div class="tx-spinner"></div><div class="tx-text">' + escapeHtml(text || "Submitting to Stellar...") + '</div>';
+    modal.innerHTML =
+      '<div class="tx-spinner"></div><div class="tx-text">' +
+      escapeHtml(text || "Submitting to Stellar...") +
+      "</div>";
     overlay.classList.add("active");
   }
   function hideTxOverlay() {
@@ -278,14 +312,16 @@
   function skeletonCards(n) {
     let html = '<div class="stat-grid">';
     for (let i = 0; i < (n || 4); i++) {
-      html += '<div class="skeleton-card"><div class="skeleton skeleton-lg"></div><div class="skeleton skeleton-line w60"></div></div>';
+      html +=
+        '<div class="skeleton-card"><div class="skeleton skeleton-lg"></div><div class="skeleton skeleton-line w60"></div></div>';
     }
-    return html + '</div>';
+    return html + "</div>";
   }
   function skeletonList(n) {
-    let html = '';
+    let html = "";
     for (let i = 0; i < (n || 3); i++) {
-      html += '<div class="skeleton-card" style="height:64px;margin-bottom:8px"><div class="skeleton skeleton-line w80"></div></div>';
+      html +=
+        '<div class="skeleton-card" style="height:64px;margin-bottom:8px"><div class="skeleton skeleton-line w80"></div></div>';
     }
     return html;
   }
@@ -300,22 +336,38 @@
   // ── Data Fetchers ──
   async function loadStats() {
     state.loading.stats = true;
-    try { state.stats = await api("/stats"); } catch (e) { console.error(e); }
+    try {
+      state.stats = await api("/stats");
+    } catch (e) {
+      console.error(e);
+    }
     state.loading.stats = false;
   }
   async function loadWallets() {
     state.loading.wallets = true;
-    try { state.wallets = await api("/wallets"); } catch (e) { console.error(e); }
+    try {
+      state.wallets = await api("/wallets");
+    } catch (e) {
+      console.error(e);
+    }
     state.loading.wallets = false;
   }
   async function loadAgents() {
     state.loading.agents = true;
-    try { state.agents = await api("/agents"); } catch (e) { console.error(e); }
+    try {
+      state.agents = await api("/agents");
+    } catch (e) {
+      console.error(e);
+    }
     state.loading.agents = false;
   }
   async function loadJobs() {
     state.loading.jobs = true;
-    try { state.jobs = await api("/jobs"); } catch (e) { console.error(e); }
+    try {
+      state.jobs = await api("/jobs");
+    } catch (e) {
+      console.error(e);
+    }
     state.loading.jobs = false;
   }
 
@@ -324,11 +376,12 @@
   // 1. Dashboard Overview
   async function renderDashboard() {
     setPage(
-      '<div class="page-header"><div class="page-header-row">'
-      + '<div><div class="page-title">Dashboard</div><div class="page-subtitle">Bear Protocol overview on Stellar Testnet</div></div>'
-      + '<div class="page-badge"><span class="dot"></span>Connected</div>'
-      + '</div></div>'
-      + skeletonCards(4) + skeletonList(5)
+      '<div class="page-header"><div class="page-header-row">' +
+        '<div><div class="page-title">Dashboard</div><div class="page-subtitle">Bear Protocol overview on Stellar Testnet</div></div>' +
+        '<div class="page-badge"><span class="dot"></span>Connected</div>' +
+        "</div></div>" +
+        skeletonCards(4) +
+        skeletonList(5),
     );
 
     await Promise.all([loadStats(), loadJobs()]);
@@ -346,95 +399,126 @@
     }
 
     // Stat cards with icons
-    var statCards = '<div class="stat-grid">'
-      + '<div class="stat-card">'
-      + '<div class="stat-card-top"><div class="stat-label">Total Agents</div>'
-      + '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>'
-      + '</div><div class="stat-value">' + s.totalAgents + '</div></div>'
-      + '<div class="stat-card">'
-      + '<div class="stat-card-top"><div class="stat-label">Active Jobs</div>'
-      + '<div class="stat-icon amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>'
-      + '</div><div class="stat-value accent">' + s.activeJobs + '</div></div>'
-      + '<div class="stat-card">'
-      + '<div class="stat-card-top"><div class="stat-label">Total Escrowed</div>'
-      + '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>'
-      + '</div><div class="stat-value">' + totalEscrowed.toFixed(2) + ' <span style="font-size:14px;color:var(--text-muted);font-weight:400">USDC</span></div></div>'
-      + '<div class="stat-card">'
-      + '<div class="stat-card-top"><div class="stat-label">Fee Rate</div>'
-      + '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 16 3.34"/></svg></div>'
-      + '</div><div class="stat-value">' + (s.feeBps / 100).toFixed(0) + '%</div></div>'
-      + '</div>';
+    var statCards =
+      '<div class="stat-grid">' +
+      '<div class="stat-card">' +
+      '<div class="stat-card-top"><div class="stat-label">Total Agents</div>' +
+      '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      s.totalAgents +
+      "</div></div>" +
+      '<div class="stat-card">' +
+      '<div class="stat-card-top"><div class="stat-label">Active Jobs</div>' +
+      '<div class="stat-icon amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>' +
+      '</div><div class="stat-value accent">' +
+      s.activeJobs +
+      "</div></div>" +
+      '<div class="stat-card">' +
+      '<div class="stat-card-top"><div class="stat-label">Total Escrowed</div>' +
+      '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      totalEscrowed.toFixed(2) +
+      ' <span style="font-size:14px;color:var(--text-muted);font-weight:400">USDC</span></div></div>' +
+      '<div class="stat-card">' +
+      '<div class="stat-card-top"><div class="stat-label">Fee Rate</div>' +
+      '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 16 3.34"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      (s.feeBps / 100).toFixed(0) +
+      "%</div></div>" +
+      "</div>";
 
     // Activity feed
-    var activityHtml = '';
+    var activityHtml = "";
     if (recentJobs.length === 0) {
-      activityHtml = '<div class="empty-state" style="padding:48px 24px">'
-        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>'
-        + '<div class="empty-title">No jobs yet</div>'
-        + '<div class="empty-desc">Create your first job to see activity here.</div></div>';
+      activityHtml =
+        '<div class="empty-state" style="padding:48px 24px">' +
+        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>' +
+        '<div class="empty-title">No jobs yet</div>' +
+        '<div class="empty-desc">Create your first job to see activity here.</div></div>';
     } else {
       for (const j of recentJobs) {
-        activityHtml += '<div class="activity-row">'
-          + '<div class="activity-id">#' + escapeHtml(String(j.id)) + '</div>'
-          + '<div class="activity-info">'
-          + '<div class="activity-desc">' + escapeHtml(j.description || "\u2014") + '</div>'
-          + '<div class="activity-meta">Client: ' + truncAddr(j.client) + '</div>'
-          + '</div>'
-          + '<div class="activity-right">'
-          + '<div class="activity-amount">' + formatMusd(j.budget) + ' <span class="activity-unit">USDC</span></div>'
-          + '<div class="activity-status">' + statusBadge(j.status) + '</div>'
-          + '</div></div>';
+        activityHtml +=
+          '<div class="activity-row">' +
+          '<div class="activity-id">#' +
+          escapeHtml(String(j.id)) +
+          "</div>" +
+          '<div class="activity-info">' +
+          '<div class="activity-desc">' +
+          escapeHtml(j.description || "\u2014") +
+          "</div>" +
+          '<div class="activity-meta">Client: ' +
+          truncAddr(j.client) +
+          "</div>" +
+          "</div>" +
+          '<div class="activity-right">' +
+          '<div class="activity-amount">' +
+          formatMusd(j.budget) +
+          ' <span class="activity-unit">USDC</span></div>' +
+          '<div class="activity-status">' +
+          statusBadge(j.status) +
+          "</div>" +
+          "</div></div>";
       }
     }
 
     // Quick actions sidebar
-    var quickActions = ''
-      + '<a href="#/jobs" class="quick-action" onclick="setTimeout(function(){window.__showCreateJob()},300)">'
-      + '<div class="qa-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>'
-      + '<div class="qa-info"><div class="qa-title">Create Job</div><div class="qa-desc">Lock USDC in escrow</div></div>'
-      + '<svg class="qa-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>'
-      + '<a href="#/agents" class="quick-action" onclick="setTimeout(function(){window.__showRegisterAgent()},300)">'
-      + '<div class="qa-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></div>'
-      + '<div class="qa-info"><div class="qa-title">Register Agent</div><div class="qa-desc">On-chain identity</div></div>'
-      + '<svg class="qa-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>'
-      + '<a href="#/wallet" class="quick-action">'
-      + '<div class="qa-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></div>'
-      + '<div class="qa-info"><div class="qa-title">View Wallets</div><div class="qa-desc">Check balances</div></div>'
-      + '<svg class="qa-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>';
+    var quickActions =
+      "" +
+      '<a href="#/jobs" class="quick-action" onclick="setTimeout(function(){window.__showCreateJob()},300)">' +
+      '<div class="qa-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>' +
+      '<div class="qa-info"><div class="qa-title">Create Job</div><div class="qa-desc">Lock USDC in escrow</div></div>' +
+      '<svg class="qa-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>' +
+      '<a href="#/agents" class="quick-action" onclick="setTimeout(function(){window.__showRegisterAgent()},300)">' +
+      '<div class="qa-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></div>' +
+      '<div class="qa-info"><div class="qa-title">Register Agent</div><div class="qa-desc">On-chain identity</div></div>' +
+      '<svg class="qa-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>' +
+      '<a href="#/wallet" class="quick-action">' +
+      '<div class="qa-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></div>' +
+      '<div class="qa-info"><div class="qa-title">View Wallets</div><div class="qa-desc">Check balances</div></div>' +
+      '<svg class="qa-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>';
 
     setPage(
-      '<div class="page-header"><div class="page-header-row">'
-      + '<div><div class="page-title">Dashboard</div><div class="page-subtitle">Bear Protocol overview on Stellar Testnet</div></div>'
-      + '<div class="page-badge"><span class="dot"></span>Connected</div>'
-      + '</div></div>'
-      + statCards
-      + '<div class="dash-grid">'
-      + '<div class="dash-panel">'
-      + '<div class="dash-panel-header"><div class="dash-panel-title">Recent Activity</div><a href="#/jobs" class="dash-panel-link">View all jobs</a></div>'
-      + activityHtml
-      + '</div>'
-      + '<div class="dash-panel">'
-      + '<div class="dash-panel-header"><div class="dash-panel-title">Quick Actions</div></div>'
-      + quickActions
-      + '</div>'
-      + '</div>'
+      '<div class="page-header"><div class="page-header-row">' +
+        '<div><div class="page-title">Dashboard</div><div class="page-subtitle">Bear Protocol overview on Stellar Testnet</div></div>' +
+        '<div class="page-badge"><span class="dot"></span>Connected</div>' +
+        "</div></div>" +
+        statCards +
+        '<div class="dash-grid">' +
+        '<div class="dash-panel">' +
+        '<div class="dash-panel-header"><div class="dash-panel-title">Recent Activity</div><a href="#/jobs" class="dash-panel-link">View all jobs</a></div>' +
+        activityHtml +
+        "</div>" +
+        '<div class="dash-panel">' +
+        '<div class="dash-panel-header"><div class="dash-panel-title">Quick Actions</div></div>' +
+        quickActions +
+        "</div>" +
+        "</div>",
     );
   }
 
   // 2. Wallets
   async function renderWallets() {
     var skeletonCount = wallet.connected ? 3 : 2;
-    var skeletons = '';
-    for (var si = 0; si < skeletonCount; si++) skeletons += '<div class="skeleton-card" style="height:280px"></div>';
-    setPage('<div class="page-header"><div class="page-title">Wallets</div><div class="page-subtitle">Testnet accounts for buyer and seller agents</div></div>'
-      + '<div class="wallet-grid">' + skeletons + '</div>');
+    var skeletons = "";
+    for (var si = 0; si < skeletonCount; si++)
+      skeletons += '<div class="skeleton-card" style="height:280px"></div>';
+    setPage(
+      '<div class="page-header"><div class="page-title">Wallets</div><div class="page-subtitle">Testnet accounts for buyer and seller agents</div></div>' +
+        '<div class="wallet-grid">' +
+        skeletons +
+        "</div>",
+    );
 
     // Load demo wallets + optionally Freighter wallet balance
     var freighterBalance = null;
     var promises = [loadWallets()];
     if (wallet.connected) {
       promises.push(
-        api("/balance/" + wallet.publicKey).then(function(b) { freighterBalance = b; }).catch(function() {})
+        api("/balance/" + wallet.publicKey)
+          .then(function (b) {
+            freighterBalance = b;
+          })
+          .catch(function () {}),
       );
     }
     await Promise.all(promises);
@@ -445,46 +529,69 @@
     }
 
     function walletCard(label, role, data, type) {
-      return '<div class="wallet-card ' + type + '">'
-        + '<div class="wallet-card-header">'
-        + '<div class="wallet-name">' + escapeHtml(label) + '</div>'
-        + '<div class="wallet-role">' + escapeHtml(role) + '</div>'
-        + '</div>'
-        + '<div class="wallet-card-body">'
-        + '<div class="wallet-addr" onclick="window.__copy(\'' + data.address + '\')">'
-        + '<code>' + escapeHtml(data.address) + '</code>'
-        + '<span class="copy-hint">Click to copy</span>'
-        + '</div>'
-        + '<div class="balance-row"><span class="balance-label xlm">XLM</span>'
-        + '<span class="balance-value">' + parseFloat(data.xlm).toFixed(2) + '<span class="balance-unit">XLM</span></span></div>'
-        + '<div class="balance-row"><span class="balance-label musd">MUSD</span>'
-        + '<span class="balance-value">' + parseFloat(data.musd).toFixed(2) + '<span class="balance-unit">MUSD</span></span></div>'
-        + '<div style="margin-top:18px">'
-        + '<a href="https://friendbot.stellar.org?addr=' + encodeURIComponent(data.address) + '" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Fund XLM via Friendbot</a>'
-        + '</div></div></div>';
+      return (
+        '<div class="wallet-card ' +
+        type +
+        '">' +
+        '<div class="wallet-card-header">' +
+        '<div class="wallet-name">' +
+        escapeHtml(label) +
+        "</div>" +
+        '<div class="wallet-role">' +
+        escapeHtml(role) +
+        "</div>" +
+        "</div>" +
+        '<div class="wallet-card-body">' +
+        '<div class="wallet-addr" onclick="window.__copy(\'' +
+        data.address +
+        "')\">" +
+        "<code>" +
+        escapeHtml(data.address) +
+        "</code>" +
+        '<span class="copy-hint">Click to copy</span>' +
+        "</div>" +
+        '<div class="balance-row"><span class="balance-label xlm">XLM</span>' +
+        '<span class="balance-value">' +
+        parseFloat(data.xlm).toFixed(2) +
+        '<span class="balance-unit">XLM</span></span></div>' +
+        '<div class="balance-row"><span class="balance-label musd">MUSD</span>' +
+        '<span class="balance-value">' +
+        parseFloat(data.musd).toFixed(2) +
+        '<span class="balance-unit">MUSD</span></span></div>' +
+        '<div style="margin-top:18px">' +
+        '<a href="https://friendbot.stellar.org?addr=' +
+        encodeURIComponent(data.address) +
+        '" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Fund XLM via Friendbot</a>' +
+        "</div></div></div>"
+      );
     }
 
-    var freighterCard = '';
+    var freighterCard = "";
     if (wallet.connected && freighterBalance) {
-      freighterCard = walletCard("Your Wallet", "Freighter (Connected)", freighterBalance, "freighter");
+      freighterCard = walletCard(
+        "Your Wallet",
+        "Freighter (Connected)",
+        freighterBalance,
+        "freighter",
+      );
     }
 
     setPage(
-      '<div class="page-header"><div class="page-title">Wallets</div><div class="page-subtitle">Testnet accounts for buyer and seller agents</div></div>'
-      + '<div class="wallet-grid">'
-      + freighterCard
-      + walletCard("Buyer Wallet", "Client / Evaluator", w.buyer, "buyer")
-      + walletCard("Seller Wallet", "Provider", w.seller, "seller")
-      + '</div>'
+      '<div class="page-header"><div class="page-title">Wallets</div><div class="page-subtitle">Testnet accounts for buyer and seller agents</div></div>' +
+        '<div class="wallet-grid">' +
+        freighterCard +
+        walletCard("Buyer Wallet", "Client / Evaluator", w.buyer, "buyer") +
+        walletCard("Seller Wallet", "Provider", w.seller, "seller") +
+        "</div>",
     );
   }
 
   // 3. Jobs
   async function renderJobs() {
     setPage(
-      '<div class="section-header"><div><div class="section-title">Jobs</div><div class="page-subtitle" style="margin-top:2px">Escrow-based job marketplace on Soroban</div></div>'
-      + '<button class="btn btn-primary" onclick="window.__showCreateJob()">+ Create Job</button></div>'
-      + skeletonList(4)
+      '<div class="section-header"><div><div class="section-title">Jobs</div><div class="page-subtitle" style="margin-top:2px">Escrow-based job marketplace on Soroban</div></div>' +
+        '<button class="btn btn-primary" onclick="window.__showCreateJob()">+ Create Job</button></div>' +
+        skeletonList(4),
     );
     await loadJobs();
     renderJobList();
@@ -495,20 +602,31 @@
     const filters = ["Active", "All", "Funded", "Submitted", "Completed", "Cancelled"];
     let filtered;
     if (state.jobFilter === "Active") {
-      filtered = jobs.filter(function(j) { return j.status === "Funded" || j.status === "Submitted"; });
+      filtered = jobs.filter(function (j) {
+        return j.status === "Funded" || j.status === "Submitted";
+      });
     } else if (state.jobFilter === "All") {
       filtered = jobs;
     } else {
-      filtered = jobs.filter(function(j) { return j.status === state.jobFilter; });
+      filtered = jobs.filter(function (j) {
+        return j.status === state.jobFilter;
+      });
     }
 
     let tabs = '<div class="filter-tabs">';
     for (const f of filters) {
-      tabs += '<button class="filter-tab ' + (f === state.jobFilter ? 'active' : '') + '" onclick="window.__filterJobs(\'' + f + '\')">' + f + '</button>';
+      tabs +=
+        '<button class="filter-tab ' +
+        (f === state.jobFilter ? "active" : "") +
+        '" onclick="window.__filterJobs(\'' +
+        f +
+        "')\">" +
+        f +
+        "</button>";
     }
-    tabs += '</div>';
+    tabs += "</div>";
 
-    let content = '';
+    let content = "";
     if (filtered.length === 0) {
       let label = "";
       if (state.jobFilter === "All") {
@@ -518,117 +636,178 @@
       } else {
         label = state.jobFilter.toLowerCase() + " ";
       }
-      content = '<div class="empty-state">'
-        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>'
-        + '<div class="empty-title">No ' + label + 'jobs</div>'
-        + '<div class="empty-desc">Create your first job to see it here.</div></div>';
+      content =
+        '<div class="empty-state">' +
+        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>' +
+        '<div class="empty-title">No ' +
+        label +
+        "jobs</div>" +
+        '<div class="empty-desc">Create your first job to see it here.</div></div>';
     } else {
       content = '<div class="job-list">';
       for (const j of filtered) {
-        let actions = '';
+        let actions = "";
         if (j.status === "Funded") {
-          actions = '<button class="btn btn-primary btn-sm" onclick="window.__submitJob(\'' + j.id + '\')">Submit Work</button>'
-            + '<button class="btn btn-danger btn-sm" onclick="window.__cancelJob(\'' + j.id + '\')">Cancel</button>';
+          actions =
+            '<button class="btn btn-primary btn-sm" onclick="window.__submitJob(\'' +
+            j.id +
+            "')\">Submit Work</button>" +
+            '<button class="btn btn-danger btn-sm" onclick="window.__cancelJob(\'' +
+            j.id +
+            "')\">Cancel</button>";
         } else if (j.status === "Submitted") {
-          actions = '<button class="btn btn-primary btn-sm" onclick="window.__completeJob(\'' + j.id + '\')">Complete (Release Funds)</button>';
+          actions =
+            '<button class="btn btn-primary btn-sm" onclick="window.__completeJob(\'' +
+            j.id +
+            "')\">Complete (Release Funds)</button>";
         } else {
-          actions = '<span style="font-size:13px;color:var(--text-dim)">Job is ' + escapeHtml(j.status.toLowerCase()) + '. No actions available.</span>';
+          actions =
+            '<span style="font-size:13px;color:var(--text-dim)">Job is ' +
+            escapeHtml(j.status.toLowerCase()) +
+            ". No actions available.</span>";
         }
 
-        let deliverableHtml = '';
+        let deliverableHtml = "";
         if (j.deliverable) {
-          deliverableHtml = '<div class="detail-item" style="grid-column:1/-1">'
-            + '<div class="detail-label">Deliverable</div>'
-            + '<div class="detail-value">' + escapeHtml(j.deliverable) + '</div></div>';
+          deliverableHtml =
+            '<div class="detail-item" style="grid-column:1/-1">' +
+            '<div class="detail-label">Deliverable</div>' +
+            '<div class="detail-value">' +
+            escapeHtml(j.deliverable) +
+            "</div></div>";
         }
 
-        content += '<div class="job-row" id="job-' + j.id + '">'
-          + '<div class="job-summary" onclick="window.__toggleJob(\'' + j.id + '\')">'
-          + '<div class="job-id">#' + escapeHtml(String(j.id)) + '</div>'
-          + statusBadge(j.status)
-          + '<div class="job-desc">' + escapeHtml(j.description || "\u2014") + '</div>'
-          + '<div class="job-budget">' + formatMusd(j.budget) + ' <span class="unit">MUSD</span></div>'
-          + '<svg class="job-expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>'
-          + '</div>'
-          + '<div class="job-detail">'
-          + '<div class="detail-grid">'
-          + '<div class="detail-item"><div class="detail-label">Client</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' + j.client + '\')">' + truncAddr(j.client) + '</div></div>'
-          + '<div class="detail-item"><div class="detail-label">Provider</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' + j.provider + '\')">' + truncAddr(j.provider) + '</div></div>'
-          + '<div class="detail-item"><div class="detail-label">Evaluator</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' + j.evaluator + '\')">' + truncAddr(j.evaluator) + '</div></div>'
-          + '<div class="detail-item"><div class="detail-label">Token</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' + j.token + '\')">' + truncAddr(j.token) + '</div></div>'
-          + deliverableHtml
-          + '</div>'
-          + '<div class="job-actions">' + actions + '</div>'
-          + '</div></div>';
+        content +=
+          '<div class="job-row" id="job-' +
+          j.id +
+          '">' +
+          '<div class="job-summary" onclick="window.__toggleJob(\'' +
+          j.id +
+          "')\">" +
+          '<div class="job-id">#' +
+          escapeHtml(String(j.id)) +
+          "</div>" +
+          statusBadge(j.status) +
+          '<div class="job-desc">' +
+          escapeHtml(j.description || "\u2014") +
+          "</div>" +
+          '<div class="job-budget">' +
+          formatMusd(j.budget) +
+          ' <span class="unit">MUSD</span></div>' +
+          '<svg class="job-expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>' +
+          "</div>" +
+          '<div class="job-detail">' +
+          '<div class="detail-grid">' +
+          '<div class="detail-item"><div class="detail-label">Client</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' +
+          j.client +
+          "')\">" +
+          truncAddr(j.client) +
+          "</div></div>" +
+          '<div class="detail-item"><div class="detail-label">Provider</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' +
+          j.provider +
+          "')\">" +
+          truncAddr(j.provider) +
+          "</div></div>" +
+          '<div class="detail-item"><div class="detail-label">Evaluator</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' +
+          j.evaluator +
+          "')\">" +
+          truncAddr(j.evaluator) +
+          "</div></div>" +
+          '<div class="detail-item"><div class="detail-label">Token</div><div class="detail-value" style="cursor:pointer" onclick="window.__copy(\'' +
+          j.token +
+          "')\">" +
+          truncAddr(j.token) +
+          "</div></div>" +
+          deliverableHtml +
+          "</div>" +
+          '<div class="job-actions">' +
+          actions +
+          "</div>" +
+          "</div></div>";
       }
-      content += '</div>';
+      content += "</div>";
     }
 
     setPage(
-      '<div class="section-header"><div><div class="section-title">Jobs</div><div class="page-subtitle" style="margin-top:2px">Escrow-based job marketplace on Soroban</div></div>'
-      + '<button class="btn btn-primary" onclick="window.__showCreateJob()">+ Create Job</button></div>'
-      + tabs + content
+      '<div class="section-header"><div><div class="section-title">Jobs</div><div class="page-subtitle" style="margin-top:2px">Escrow-based job marketplace on Soroban</div></div>' +
+        '<button class="btn btn-primary" onclick="window.__showCreateJob()">+ Create Job</button></div>' +
+        tabs +
+        content,
     );
   }
 
   // 4. Agents
   async function renderAgents() {
     setPage(
-      '<div class="section-header"><div><div class="section-title">Agents</div><div class="page-subtitle" style="margin-top:2px">On-chain identity registry for AI agents</div></div>'
-      + '<button class="btn btn-primary" onclick="window.__showRegisterAgent()">+ Register Agent</button></div>'
-      + skeletonList(3)
+      '<div class="section-header"><div><div class="section-title">Agents</div><div class="page-subtitle" style="margin-top:2px">On-chain identity registry for AI agents</div></div>' +
+        '<button class="btn btn-primary" onclick="window.__showRegisterAgent()">+ Register Agent</button></div>' +
+        skeletonList(3),
     );
 
     await loadAgents();
     const agents = state.agents || [];
 
-    let cards = '';
+    let cards = "";
     if (agents.length === 0) {
-      cards = '<div class="empty-state">'
-        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>'
-        + '<div class="empty-title">No agents registered</div>'
-        + '<div class="empty-desc">Register your first agent to get started.</div></div>';
+      cards =
+        '<div class="empty-state">' +
+        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>' +
+        '<div class="empty-title">No agents registered</div>' +
+        '<div class="empty-desc">Register your first agent to get started.</div></div>';
     } else {
       cards = '<div class="agent-grid">';
       for (const a of agents) {
-        var initial = a.owner ? a.owner.charAt(0) : '?';
-        cards += '<div class="agent-card">'
-          + '<div class="agent-card-top">'
-          + '<div class="agent-avatar">' + escapeHtml(initial) + '</div>'
-          + '<div class="agent-id">Agent <span>#' + escapeHtml(String(a.id)) + '</span></div>'
-          + '</div>'
-          + '<div class="agent-field"><div class="agent-field-label">Owner</div>'
-          + '<div class="agent-field-value" style="cursor:pointer" onclick="window.__copy(\'' + a.owner + '\')">' + truncAddr(a.owner) + '</div></div>'
-          + '<div class="agent-field"><div class="agent-field-label">Metadata URI</div>'
-          + '<div class="agent-field-value">' + escapeHtml(a.uri) + '</div></div>'
-          + '</div>';
+        var initial = a.owner ? a.owner.charAt(0) : "?";
+        cards +=
+          '<div class="agent-card">' +
+          '<div class="agent-card-top">' +
+          '<div class="agent-avatar">' +
+          escapeHtml(initial) +
+          "</div>" +
+          '<div class="agent-id">Agent <span>#' +
+          escapeHtml(String(a.id)) +
+          "</span></div>" +
+          "</div>" +
+          '<div class="agent-field"><div class="agent-field-label">Owner</div>' +
+          '<div class="agent-field-value" style="cursor:pointer" onclick="window.__copy(\'' +
+          a.owner +
+          "')\">" +
+          truncAddr(a.owner) +
+          "</div></div>" +
+          '<div class="agent-field"><div class="agent-field-label">Metadata URI</div>' +
+          '<div class="agent-field-value">' +
+          escapeHtml(a.uri) +
+          "</div></div>" +
+          "</div>";
       }
-      cards += '</div>';
+      cards += "</div>";
     }
 
     setPage(
-      '<div class="section-header"><div><div class="section-title">Agents</div><div class="page-subtitle" style="margin-top:2px">On-chain identity registry for AI agents</div></div>'
-      + '<button class="btn btn-primary" onclick="window.__showRegisterAgent()">+ Register Agent</button></div>'
-      + '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(3,1fr)">'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Registered</div>'
-      + '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>'
-      + '</div><div class="stat-value">' + agents.length + '</div></div>'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Network</div>'
-      + '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>'
-      + '</div><div class="stat-value" style="font-size:18px;color:var(--status-completed)">Testnet</div></div>'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Registry</div>'
-      + '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'
-      + '</div><div class="stat-value" style="font-size:14px;font-weight:600;color:var(--text-muted);font-family:var(--mono)">ERC-8004</div></div>'
-      + '</div>'
-      + cards
+      '<div class="section-header"><div><div class="section-title">Agents</div><div class="page-subtitle" style="margin-top:2px">On-chain identity registry for AI agents</div></div>' +
+        '<button class="btn btn-primary" onclick="window.__showRegisterAgent()">+ Register Agent</button></div>' +
+        '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(3,1fr)">' +
+        '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Registered</div>' +
+        '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>' +
+        '</div><div class="stat-value">' +
+        agents.length +
+        "</div></div>" +
+        '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Network</div>' +
+        '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>' +
+        '</div><div class="stat-value" style="font-size:18px;color:var(--status-completed)">Testnet</div></div>' +
+        '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Registry</div>' +
+        '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>' +
+        '</div><div class="stat-value" style="font-size:14px;font-weight:600;color:var(--text-muted);font-family:var(--mono)">ERC-8004</div></div>' +
+        "</div>" +
+        cards,
     );
   }
 
   // 5. Transaction History
   async function renderHistory() {
     setPage(
-      '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
-      + skeletonList(6)
+      '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>' +
+        skeletonList(6),
     );
 
     await Promise.all([loadJobs(), loadAgents()]);
@@ -639,21 +818,31 @@
     // Build a unified event list: jobs (all statuses) + agent registrations
     var events = [];
     for (var j of jobs) {
-      events.push({ kind: "job", id: j.id, status: j.status, desc: j.description || "—", budget: j.budget, actor: j.client, deliverable: j.deliverable || null });
+      events.push({
+        kind: "job",
+        id: j.id,
+        status: j.status,
+        desc: j.description || "—",
+        budget: j.budget,
+        actor: j.client,
+        deliverable: j.deliverable || null,
+      });
     }
     for (var a of agents) {
       events.push({ kind: "agent", id: a.id, uri: a.uri, actor: a.owner });
     }
     // Sort by numeric id descending (latest first)
-    events.sort(function(a, b) { return Number(b.id) - Number(a.id); });
+    events.sort(function (a, b) {
+      return Number(b.id) - Number(a.id);
+    });
 
     if (events.length === 0) {
       setPage(
-        '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
-        + '<div class="empty-state">'
-        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>'
-        + '<div class="empty-title">No history yet</div>'
-        + '<div class="empty-desc">Jobs and agent registrations will appear here.</div></div>'
+        '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>' +
+          '<div class="empty-state">' +
+          '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>' +
+          '<div class="empty-title">No history yet</div>' +
+          '<div class="empty-desc">Jobs and agent registrations will appear here.</div></div>',
       );
       return;
     }
@@ -661,7 +850,7 @@
     // Filter tabs for history
     var histFilter = window.__histFilter || "All";
     var histFilters = ["All", "Jobs", "Agents", "Completed", "Cancelled"];
-    var filteredEvents = events.filter(function(ev) {
+    var filteredEvents = events.filter(function (ev) {
       if (histFilter === "All") return true;
       if (histFilter === "Jobs") return ev.kind === "job";
       if (histFilter === "Agents") return ev.kind === "agent";
@@ -672,75 +861,124 @@
 
     var tabs = '<div class="filter-tabs">';
     for (var hf of histFilters) {
-      tabs += '<button class="filter-tab ' + (hf === histFilter ? 'active' : '') + '" onclick="window.__filterHistory(\'' + hf + '\')">' + hf + '</button>';
+      tabs +=
+        '<button class="filter-tab ' +
+        (hf === histFilter ? "active" : "") +
+        '" onclick="window.__filterHistory(\'' +
+        hf +
+        "')\">" +
+        hf +
+        "</button>";
     }
-    tabs += '</div>';
+    tabs += "</div>";
 
     var rows = '<div class="history-list">';
     if (filteredEvents.length === 0) {
-      rows += '<div class="empty-state" style="margin-top:24px">'
-        + '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>'
-        + '<div class="empty-title">No matching records</div>'
-        + '<div class="empty-desc">Try a different filter.</div></div>';
+      rows +=
+        '<div class="empty-state" style="margin-top:24px">' +
+        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>' +
+        '<div class="empty-title">No matching records</div>' +
+        '<div class="empty-desc">Try a different filter.</div></div>';
     } else {
       for (var ev of filteredEvents) {
         var icon, label, meta, badge;
         if (ev.kind === "job") {
-          icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
+          icon =
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
           label = escapeHtml(ev.desc);
-          var deliverablePart = ev.deliverable ? ' &nbsp;·&nbsp; <a href="' + escapeHtml(ev.deliverable) + '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:500">View Deliverable ↗</a>' : '';
-          meta = 'Client: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + formatMusd(ev.budget) + ' USDC' + deliverablePart;
+          var deliverablePart = ev.deliverable
+            ? ' &nbsp;·&nbsp; <a href="' +
+              escapeHtml(ev.deliverable) +
+              '" target="_blank" rel="noopener" style="color:var(--accent);font-weight:500">View Deliverable ↗</a>'
+            : "";
+          meta =
+            "Client: " +
+            truncAddr(ev.actor) +
+            " &nbsp;·&nbsp; " +
+            formatMusd(ev.budget) +
+            " USDC" +
+            deliverablePart;
           badge = statusBadge(ev.status);
         } else {
-          icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>';
-          label = 'Agent registered';
-          meta = 'Owner: ' + truncAddr(ev.actor) + ' &nbsp;·&nbsp; ' + escapeHtml(ev.uri || '');
-          badge = '<span class="status-badge status-Completed"><span class="dot"></span>Registered</span>';
+          icon =
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>';
+          label = "Agent registered";
+          meta = "Owner: " + truncAddr(ev.actor) + " &nbsp;·&nbsp; " + escapeHtml(ev.uri || "");
+          badge =
+            '<span class="status-badge status-Completed"><span class="dot"></span>Registered</span>';
         }
-        rows += '<div class="history-row">'
-          + '<div class="history-icon ' + (ev.kind === 'job' ? 'hist-job' : 'hist-agent') + '">' + icon + '</div>'
-          + '<div class="history-body">'
-          + '<div class="history-label">' + label + '</div>'
-          + '<div class="history-meta">' + meta + '</div>'
-          + '</div>'
-          + '<div class="history-right">'
-          + '<div class="history-id">#' + escapeHtml(String(ev.id)) + '</div>'
-          + badge
-          + '</div>'
-          + '</div>';
+        rows +=
+          '<div class="history-row">' +
+          '<div class="history-icon ' +
+          (ev.kind === "job" ? "hist-job" : "hist-agent") +
+          '">' +
+          icon +
+          "</div>" +
+          '<div class="history-body">' +
+          '<div class="history-label">' +
+          label +
+          "</div>" +
+          '<div class="history-meta">' +
+          meta +
+          "</div>" +
+          "</div>" +
+          '<div class="history-right">' +
+          '<div class="history-id">#' +
+          escapeHtml(String(ev.id)) +
+          "</div>" +
+          badge +
+          "</div>" +
+          "</div>";
       }
     }
-    rows += '</div>';
+    rows += "</div>";
 
-    var completedCount = jobs.filter(function(j) { return j.status === "Completed"; }).length;
-    var cancelledCount = jobs.filter(function(j) { return j.status === "Cancelled"; });
+    var completedCount = jobs.filter(function (j) {
+      return j.status === "Completed";
+    }).length;
+    var cancelledCount = jobs.filter(function (j) {
+      return j.status === "Cancelled";
+    });
     var totalVolume = 0;
-    for (var cj of jobs.filter(function(j) { return j.status === "Completed"; })) {
+    for (var cj of jobs.filter(function (j) {
+      return j.status === "Completed";
+    })) {
       totalVolume += parseFloat(formatMusd(cj.budget));
     }
 
-    var summary = '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(4,1fr)">'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Jobs</div>'
-      + '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>'
-      + '</div><div class="stat-value">' + jobs.length + '</div></div>'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Completed</div>'
-      + '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>'
-      + '</div><div class="stat-value">' + completedCount + '</div></div>'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Settled</div>'
-      + '<div class="stat-icon amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg></div>'
-      + '</div><div class="stat-value">' + totalVolume.toFixed(2) + ' <span style="font-size:12px;color:var(--text-muted);font-weight:400">USDC</span></div></div>'
-      + '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Agents Registered</div>'
-      + '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>'
-      + '</div><div class="stat-value">' + agents.length + '</div></div>'
-      + '</div>';
+    var summary =
+      '<div class="stat-grid" style="margin-bottom:24px;grid-template-columns:repeat(4,1fr)">' +
+      '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Jobs</div>' +
+      '<div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      jobs.length +
+      "</div></div>" +
+      '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Completed</div>' +
+      '<div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      completedCount +
+      "</div></div>" +
+      '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Total Settled</div>' +
+      '<div class="stat-icon amber"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      totalVolume.toFixed(2) +
+      ' <span style="font-size:12px;color:var(--text-muted);font-weight:400">USDC</span></div></div>' +
+      '<div class="stat-card"><div class="stat-card-top"><div class="stat-label">Agents Registered</div>' +
+      '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>' +
+      '</div><div class="stat-value">' +
+      agents.length +
+      "</div></div>" +
+      "</div>";
 
     setPage(
-      '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>'
-      + summary + tabs + rows
+      '<div class="page-header"><div class="page-title">Transaction History</div><div class="page-subtitle">All past activity on the Bear Protocol contracts</div></div>' +
+        summary +
+        tabs +
+        rows,
     );
   }
 
-  window.__filterHistory = function(filter) {
+  window.__filterHistory = function (filter) {
     window.__histFilter = filter;
     renderHistory();
   };
@@ -749,38 +987,40 @@
 
   window.__copy = copyToClipboard;
 
-  window.__toggleJob = function(id) {
+  window.__toggleJob = function (id) {
     const row = document.getElementById("job-" + id);
     if (row) row.classList.toggle("expanded");
   };
 
-  window.__filterJobs = function(filter) {
+  window.__filterJobs = function (filter) {
     state.jobFilter = filter;
     renderJobList();
   };
 
-  window.__showCreateJob = function() {
+  window.__showCreateJob = function () {
     var walletField = wallet.connected
-      ? '<div class="form-group"><label class="form-label">Signing Wallet</label>'
-        + '<div class="form-input" style="color:var(--accent);cursor:default">' + truncAddr(wallet.publicKey) + ' (Freighter)</div></div>'
-      : '<div class="form-group"><label class="form-label">Signing Wallet</label>'
-        + '<select class="form-select" id="cj-wallet"><option value="buyer">Buyer (Client)</option><option value="seller">Seller</option></select></div>';
+      ? '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
+        '<div class="form-input" style="color:var(--accent);cursor:default">' +
+        truncAddr(wallet.publicKey) +
+        " (Freighter)</div></div>"
+      : '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
+        '<select class="form-select" id="cj-wallet"><option value="buyer">Buyer (Client)</option><option value="seller">Seller</option></select></div>';
     showModal(
-      '<h2 class="modal-title">Create Job</h2>'
-      + walletField
-      + '<div class="form-group"><label class="form-label">Description</label>'
-      + '<input class="form-input" id="cj-desc" value="Dashboard test job" placeholder="Job description..."></div>'
-      + '<div class="form-group"><label class="form-label">Budget (MUSD units, 7 decimals)</label>'
-      + '<input class="form-input" id="cj-budget" value="10000000" placeholder="10000000 = 1 MUSD"></div>'
-      + '<div class="form-group"><label class="form-label">Provider Address <span style="color:var(--text-muted);font-weight:400">(must be a registered agent)</span></label>'
-      + '<input class="form-input" id="cj-provider" placeholder="Leave blank to use default seller" autocomplete="off" spellcheck="false"></div>'
-      + '<div class="modal-actions">'
-      + '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>'
-      + '<button class="btn btn-primary" onclick="window.__doCreateJob()">Create Job</button></div>'
+      '<h2 class="modal-title">Create Job</h2>' +
+        walletField +
+        '<div class="form-group"><label class="form-label">Description</label>' +
+        '<input class="form-input" id="cj-desc" value="Dashboard test job" placeholder="Job description..."></div>' +
+        '<div class="form-group"><label class="form-label">Budget (MUSD units, 7 decimals)</label>' +
+        '<input class="form-input" id="cj-budget" value="10000000" placeholder="10000000 = 1 MUSD"></div>' +
+        '<div class="form-group"><label class="form-label">Provider Address <span style="color:var(--text-muted);font-weight:400">(must be a registered agent)</span></label>' +
+        '<input class="form-input" id="cj-provider" placeholder="Leave blank to use default seller" autocomplete="off" spellcheck="false"></div>' +
+        '<div class="modal-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-primary" onclick="window.__doCreateJob()">Create Job</button></div>',
     );
   };
 
-  window.__doCreateJob = async function() {
+  window.__doCreateJob = async function () {
     const description = document.getElementById("cj-desc").value;
     const budget = document.getElementById("cj-budget").value;
     const walletEl = document.getElementById("cj-wallet");
@@ -812,13 +1052,19 @@
     }
   };
 
-  window.__submitJob = async function(id) {
+  window.__submitJob = async function (id) {
     showTxOverlay("Submitting work...");
     try {
       if (wallet.connected) {
-        await signAndSubmit("/build/submit", { jobId: id, deliverable: "ipfs://dashboard-delivery-" + id });
+        await signAndSubmit("/build/submit", {
+          jobId: id,
+          deliverable: "ipfs://dashboard-delivery-" + id,
+        });
       } else {
-        await api("/jobs/" + id + "/submit", { method: "POST", body: { wallet: "seller", deliverable: "ipfs://dashboard-delivery-" + id } });
+        await api("/jobs/" + id + "/submit", {
+          method: "POST",
+          body: { wallet: "seller", deliverable: "ipfs://dashboard-delivery-" + id },
+        });
       }
       hideTxOverlay();
       toast("Job #" + id + " submitted!");
@@ -830,7 +1076,7 @@
     }
   };
 
-  window.__completeJob = async function(id) {
+  window.__completeJob = async function (id) {
     showTxOverlay("Completing job & releasing funds...");
     try {
       if (wallet.connected) {
@@ -848,7 +1094,7 @@
     }
   };
 
-  window.__cancelJob = async function(id) {
+  window.__cancelJob = async function (id) {
     const confirmed = window.confirm("Cancel this job and refund the escrowed funds?");
     if (!confirmed) return;
 
@@ -869,24 +1115,26 @@
     }
   };
 
-  window.__showRegisterAgent = function() {
+  window.__showRegisterAgent = function () {
     var walletField = wallet.connected
-      ? '<div class="form-group"><label class="form-label">Signing Wallet</label>'
-        + '<div class="form-input" style="color:var(--accent);cursor:default">' + truncAddr(wallet.publicKey) + ' (Freighter)</div></div>'
-      : '<div class="form-group"><label class="form-label">Signing Wallet</label>'
-        + '<select class="form-select" id="ra-wallet"><option value="buyer">Buyer</option><option value="seller">Seller</option></select></div>';
+      ? '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
+        '<div class="form-input" style="color:var(--accent);cursor:default">' +
+        truncAddr(wallet.publicKey) +
+        " (Freighter)</div></div>"
+      : '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
+        '<select class="form-select" id="ra-wallet"><option value="buyer">Buyer</option><option value="seller">Seller</option></select></div>';
     showModal(
-      '<h2 class="modal-title">Register Agent</h2>'
-      + walletField
-      + '<div class="form-group"><label class="form-label">Metadata URI</label>'
-      + '<input class="form-input" id="ra-uri" value="ipfs://dashboard-agent" placeholder="ipfs://..."></div>'
-      + '<div class="modal-actions">'
-      + '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>'
-      + '<button class="btn btn-primary" onclick="window.__doRegister()">Register</button></div>'
+      '<h2 class="modal-title">Register Agent</h2>' +
+        walletField +
+        '<div class="form-group"><label class="form-label">Metadata URI</label>' +
+        '<input class="form-input" id="ra-uri" value="ipfs://dashboard-agent" placeholder="ipfs://..."></div>' +
+        '<div class="modal-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-primary" onclick="window.__doRegister()">Register</button></div>',
     );
   };
 
-  window.__doRegister = async function() {
+  window.__doRegister = async function () {
     const uri = document.getElementById("ra-uri").value;
     const walletEl = document.getElementById("ra-wallet");
     const walletVal = walletEl ? walletEl.value : "buyer";
@@ -899,7 +1147,10 @@
         hideTxOverlay();
         toast("Agent registered! tx: " + (res.hash || "").slice(0, 8) + "...");
       } else {
-        const res = await api("/agents/register", { method: "POST", body: { wallet: walletVal, uri: uri } });
+        const res = await api("/agents/register", {
+          method: "POST",
+          body: { wallet: walletVal, uri: uri },
+        });
         hideTxOverlay();
         toast("Agent #" + res.agentId + " registered!");
       }
@@ -929,7 +1180,7 @@
     const render = routes[route] || renderDashboard;
 
     // Update active nav
-    document.querySelectorAll(".nav-item").forEach(function(el) {
+    document.querySelectorAll(".nav-item").forEach(function (el) {
       el.classList.toggle("active", el.dataset.route === route);
     });
 
@@ -950,7 +1201,7 @@
   // Mobile menu
   var menuBtn = document.getElementById("menu-btn");
   if (menuBtn) {
-    menuBtn.addEventListener("click", function() {
+    menuBtn.addEventListener("click", function () {
       document.getElementById("sidebar").classList.toggle("open");
     });
   }
@@ -994,7 +1245,10 @@
         var oldJobs3 = JSON.stringify(state.jobs);
         var oldAgents3 = JSON.stringify(state.agents);
         await Promise.all([loadJobs(), loadAgents()]);
-        if (JSON.stringify(state.jobs) !== oldJobs3 || JSON.stringify(state.agents) !== oldAgents3) {
+        if (
+          JSON.stringify(state.jobs) !== oldJobs3 ||
+          JSON.stringify(state.agents) !== oldAgents3
+        ) {
           renderHistory();
         }
       }
@@ -1009,30 +1263,42 @@
     pollTimer = setInterval(poll, 4000);
   }
   function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
   }
 
   // Start polling on load, restart on visibility change
   startPolling();
-  document.addEventListener("visibilitychange", function() {
-    if (document.hidden) { stopPolling(); } else { startPolling(); poll(); }
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      startPolling();
+      poll();
+    }
   });
 
   // Server-Sent Events: listen for invalidation events to refresh quickly
   if (typeof EventSource !== "undefined") {
     try {
       const es = new EventSource("/api/stream");
-      es.addEventListener("invalidate", function(e) {
+      es.addEventListener("invalidate", function (e) {
         try {
           const payload = JSON.parse(e.data);
           // On any invalidation, run a quick poll to refresh current view
           poll();
-        } catch (err) { poll(); }
+        } catch (err) {
+          poll();
+        }
       });
-      es.addEventListener("ping", function() {});
-      es.onerror = function() {
+      es.addEventListener("ping", function () {});
+      es.onerror = function () {
         // Close noisy stream errors; polling remains as a fallback
-        try { es.close(); } catch (e) {}
+        try {
+          es.close();
+        } catch (e) {}
       };
     } catch (e) {
       // ignore SSE setup failures — polling is the primary mechanism

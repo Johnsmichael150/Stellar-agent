@@ -1,11 +1,7 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { ExactStellarScheme } from "@x402/stellar/exact/client";
-import {
-  createEd25519Signer,
-  STELLAR_TESTNET_CAIP2,
-  STELLAR_PUBNET_CAIP2,
-} from "@x402/stellar";
+import { createEd25519Signer, STELLAR_TESTNET_CAIP2, STELLAR_PUBNET_CAIP2 } from "@x402/stellar";
 
 /** Payment lifecycle status passed to the onPayment callback. */
 export type PaymentStatus = "signing" | "pending" | "settled" | "failed";
@@ -66,8 +62,7 @@ export function marcFetch(opts: MarcFetchOptions) {
     fetchImpl,
   } = opts;
 
-  const caip2 =
-    network === "pubnet" ? STELLAR_PUBNET_CAIP2 : STELLAR_TESTNET_CAIP2;
+  const caip2 = network === "pubnet" ? STELLAR_PUBNET_CAIP2 : STELLAR_TESTNET_CAIP2;
 
   const stellarSigner = createEd25519Signer(signer.secret(), caip2);
 
@@ -98,9 +93,13 @@ export function marcFetch(opts: MarcFetchOptions) {
   };
 
   if (onPayment) {
-    const originalBuildAndPay = (stellarScheme as unknown as { pay?: (...args: unknown[]) => Promise<unknown> }).pay?.bind(stellarScheme);
+    const originalBuildAndPay = (
+      stellarScheme as unknown as { pay?: (...args: unknown[]) => Promise<unknown> }
+    ).pay?.bind(stellarScheme);
     if (originalBuildAndPay) {
-      (stellarScheme as unknown as { pay: typeof originalBuildAndPay }).pay = async (...args: Parameters<typeof originalBuildAndPay>) => {
+      (stellarScheme as unknown as { pay: typeof originalBuildAndPay }).pay = async (
+        ...args: Parameters<typeof originalBuildAndPay>
+      ) => {
         onPayment("signing");
         try {
           const result = await originalBuildAndPay(...args);

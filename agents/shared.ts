@@ -15,7 +15,8 @@ export async function createSellerAgent(options: {
     identityContract: process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
     commerceContract: process.env.AGENTIC_COMMERCE_CONTRACT || TESTNET.commerceContract,
     usdcToken: process.env.USDC_TOKEN_CONTRACT || TESTNET.usdcToken,
-    onTx: (hash) => console.log(`[tx] ${hash} → https://stellar.expert/explorer/testnet/tx/${hash}`),
+    onTx: (hash) =>
+      console.log(`[tx] ${hash} → https://stellar.expert/explorer/testnet/tx/${hash}`),
   };
 
   const seller = Keypair.fromSecret(process.env.SELLER_SECRET!);
@@ -23,7 +24,9 @@ export async function createSellerAgent(options: {
   let agentId: bigint | null = null;
   try {
     await retryWithBackoff(
-      async () => { agentId = await identity.agentOf(seller.publicKey()); },
+      async () => {
+        agentId = await identity.agentOf(seller.publicKey());
+      },
       { maxAttempts: 6, baseDelayMs: 2000, label: options.id },
     );
   } catch (err) {
@@ -32,7 +35,9 @@ export async function createSellerAgent(options: {
   }
   if (!agentId) {
     await retryWithBackoff(
-      async () => { agentId = await identity.register(seller, `ipfs://${options.id}.json`); },
+      async () => {
+        agentId = await identity.register(seller, `ipfs://${options.id}.json`);
+      },
       { maxAttempts: 4, baseDelayMs: 2000, label: options.id },
     );
     console.log(`[${options.id}] Registered as agent #${agentId}`);
@@ -42,7 +47,11 @@ export async function createSellerAgent(options: {
 
   const registryUrl = (process.env.REGISTRY_URL ?? "http://localhost:4500").replace(/\/+$/, "");
   const registryApiKey = process.env.REGISTRY_API_KEY?.trim();
-  await startHeartbeat(options.id, registryUrl, { apiKey: registryApiKey, maxAttempts: 6, baseDelayMs: 2000 });
+  await startHeartbeat(options.id, registryUrl, {
+    apiKey: registryApiKey,
+    maxAttempts: 6,
+    baseDelayMs: 2000,
+  });
 
   const app = express();
   app.use(express.json());
@@ -53,7 +62,9 @@ export async function createSellerAgent(options: {
     next();
   });
 
-  app.get("/", (_req, res) => res.json(JSON.parse(fs.readFileSync(path.join(options.agentDir, "agent.json"), "utf8"))));
+  app.get("/", (_req, res) =>
+    res.json(JSON.parse(fs.readFileSync(path.join(options.agentDir, "agent.json"), "utf8"))),
+  );
 
   /**
    * GET /health — liveness probe for monitoring and the agent registry.
@@ -93,7 +104,9 @@ export async function retryWithBackoff<T>(
       if (attempt === maxAttempts) throw err;
       const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 200;
       const prefix = label ? `[${label}] ` : "";
-      console.error(`${prefix}attempt ${attempt}/${maxAttempts} failed, retrying in ${Math.round(delay)}ms`);
+      console.error(
+        `${prefix}attempt ${attempt}/${maxAttempts} failed, retrying in ${Math.round(delay)}ms`,
+      );
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -110,12 +123,7 @@ export async function startHeartbeat(
     apiKey?: string;
   },
 ) {
-  const {
-    maxAttempts = 6,
-    baseDelayMs = 2000,
-    intervalMs = 60_000,
-    apiKey,
-  } = options ?? {};
+  const { maxAttempts = 6, baseDelayMs = 2000, intervalMs = 60_000, apiKey } = options ?? {};
 
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -144,10 +152,14 @@ export async function startHeartbeat(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (attempt === maxAttempts) {
-        console.warn(`[${agentId}] Heartbeat startup failed after ${maxAttempts} attempts: ${message}`);
+        console.warn(
+          `[${agentId}] Heartbeat startup failed after ${maxAttempts} attempts: ${message}`,
+        );
       } else {
         const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 200;
-        console.warn(`[${agentId}] Heartbeat attempt ${attempt}/${maxAttempts} failed: ${message}. Retrying in ${Math.round(delay)}ms`);
+        console.warn(
+          `[${agentId}] Heartbeat attempt ${attempt}/${maxAttempts} failed: ${message}. Retrying in ${Math.round(delay)}ms`,
+        );
         await new Promise((r) => setTimeout(r, delay));
       }
     }

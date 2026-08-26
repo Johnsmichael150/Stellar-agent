@@ -3,7 +3,7 @@
 /**
  * Development server for the Bear landing page.
  * Serves static files (index.html, style.css, app.js, etc.) and the API endpoint.
- * 
+ *
  * Usage: npm run dev
  * Then visit http://localhost:3001
  */
@@ -39,15 +39,18 @@ function handleApiRequest(req, res) {
       contracts: {
         agent_identity: {
           address: "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
-          explorer: "https://stellar.expert/explorer/testnet/contract/CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
+          explorer:
+            "https://stellar.expert/explorer/testnet/contract/CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
         },
         agentic_commerce: {
           address: "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
-          explorer: "https://stellar.expert/explorer/testnet/contract/CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
+          explorer:
+            "https://stellar.expert/explorer/testnet/contract/CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
         },
         usdc_sac: {
           address: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-          explorer: "https://stellar.expert/explorer/testnet/contract/CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+          explorer:
+            "https://stellar.expert/explorer/testnet/contract/CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
         },
       },
       timestamp: new Date().toISOString(),

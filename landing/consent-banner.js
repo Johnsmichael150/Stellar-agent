@@ -1,10 +1,10 @@
 /**
  * Consent Banner for Bear Landing Page
- * 
+ *
  * Manages user consent for:
  * - Google Fonts (external font loading)
  * - Analytics (Umami or similar tracking)
- * 
+ *
  * Persists choice in localStorage for 365 days.
  * Loads external resources only after explicit consent.
  */
@@ -47,7 +47,7 @@ function saveConsentChoice(choice) {
       choice, // "accept" or "reject"
       timestamp: new Date().toISOString(),
       expiryDate: expiryDate.toISOString(),
-    })
+    }),
   );
 }
 
@@ -57,7 +57,8 @@ function saveConsentChoice(choice) {
 function loadExternalFonts() {
   const fontLink = document.createElement("link");
   fontLink.rel = "stylesheet";
-  fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap";
+  fontLink.href =
+    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap";
   fontLink.onload = () => {
     document.documentElement.classList.add("fonts-loaded");
   };

@@ -3,15 +3,12 @@
 // animated protocol stack diagram
 
 document.addEventListener("DOMContentLoaded", () => {
-
   // ── Dashboard link base URL ──
   // Reads the configurable base path from the <meta name="marc-dashboard-url">
   // tag so this same markup works whether the dashboard is served from this
   // same origin (default "/app") or deployed separately (override the meta
   // tag's content with an absolute URL).
-  const dashboardUrl = document
-    .querySelector('meta[name="marc-dashboard-url"]')
-    ?.content?.trim();
+  const dashboardUrl = document.querySelector('meta[name="marc-dashboard-url"]')?.content?.trim();
   if (dashboardUrl) {
     document.querySelectorAll("[data-dashboard-link]").forEach((link) => {
       link.href = dashboardUrl;
@@ -28,17 +25,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     },
-    { threshold: 0.12 }
+    { threshold: 0.12 },
   );
 
   // Stagger fade-in items inside grids
-  document.querySelectorAll(".stack-grid, .steps-grid, .code-grid, .contracts-grid").forEach((group) => {
-    const items = group.querySelectorAll(".fade-in");
-    items.forEach((el, i) => {
-      el.style.transitionDelay = (i * 0.1) + "s";
-      revealObserver.observe(el);
+  document
+    .querySelectorAll(".stack-grid, .steps-grid, .code-grid, .contracts-grid")
+    .forEach((group) => {
+      const items = group.querySelectorAll(".fade-in");
+      items.forEach((el, i) => {
+        el.style.transitionDelay = i * 0.1 + "s";
+        revealObserver.observe(el);
+      });
     });
-  });
 
   // Standalone fade-in elements
   document.querySelectorAll(".fade-in").forEach((el) => {
@@ -52,18 +51,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const sections = document.querySelectorAll("section[id]");
   const navLinks = document.querySelectorAll(".nav-link[data-section]");
 
-  window.addEventListener("scroll", () => {
-    let current = "";
-    sections.forEach((section) => {
-      const top = section.offsetTop - 100;
-      if (window.scrollY >= top) {
-        current = section.getAttribute("id");
-      }
-    });
-    navLinks.forEach((link) => {
-      link.classList.toggle("active", link.dataset.section === current);
-    });
-  }, { passive: true });
+  window.addEventListener(
+    "scroll",
+    () => {
+      let current = "";
+      sections.forEach((section) => {
+        const top = section.offsetTop - 100;
+        if (window.scrollY >= top) {
+          current = section.getAttribute("id");
+        }
+      });
+      navLinks.forEach((link) => {
+        link.classList.toggle("active", link.dataset.section === current);
+      });
+    },
+    { passive: true },
+  );
 
   // ── Copy-to-clipboard ──
   const toast = document.createElement("div");
@@ -167,11 +170,19 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.scale(DPR, DPR);
     }
     resizeCanvas();
-    window.addEventListener("resize", () => { ctx.setTransform(1,0,0,1,0,0); resizeCanvas(); });
+    window.addEventListener("resize", () => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      resizeCanvas();
+    });
 
     const LAYERS = [
       { label: "Agent Identity", sublabel: "ERC-8004 · Register", color: "#F97316", y: 40 },
-      { label: "Agentic Commerce", sublabel: "ERC-8183 · Escrow & Settle", color: "#FB923C", y: 120 },
+      {
+        label: "Agentic Commerce",
+        sublabel: "ERC-8183 · Escrow & Settle",
+        color: "#FB923C",
+        y: 120,
+      },
       { label: "x402 / MPP", sublabel: "HTTP 402 · Micropayments", color: "#FED7AA", y: 200 },
     ];
 
@@ -180,15 +191,18 @@ document.addEventListener("DOMContentLoaded", () => {
     let animationId;
     let diagramVisible = false;
 
-    const diagramObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting && !diagramVisible) {
-          diagramVisible = true;
-          tick = 0;
-          drawLoop();
-        }
-      });
-    }, { threshold: 0.2 });
+    const diagramObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !diagramVisible) {
+            diagramVisible = true;
+            tick = 0;
+            drawLoop();
+          }
+        });
+      },
+      { threshold: 0.2 },
+    );
     diagramObserver.observe(canvas);
 
     function easeOutCubic(t) {
@@ -382,7 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
             },
           },
           null,
-          2
+          2,
         ),
       };
 

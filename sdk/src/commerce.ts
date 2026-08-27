@@ -15,18 +15,18 @@ const MAX_I128 = (1n << 127n) - 1n;
 
 export const i128ToScVal = (v: bigint) => nativeToScVal(v, { type: "i128" });
 export const u128ToScVal = (v: bigint) => nativeToScVal(v, { type: "u128" });
-export const u64ToScVal  = (v: bigint) => nativeToScVal(v, { type: "u64" });
-export const u32ToScVal  = (v: number) => nativeToScVal(v, { type: "u32" });
-export const strToScVal  = (v: string) => nativeToScVal(v, { type: "string" });
+export const u64ToScVal = (v: bigint) => nativeToScVal(v, { type: "u64" });
+export const u32ToScVal = (v: number) => nativeToScVal(v, { type: "u32" });
+export const strToScVal = (v: string) => nativeToScVal(v, { type: "string" });
 export const addrToScVal = (v: string) => new Address(v).toScVal();
 
 // --- ScVal decoding helpers ---
 
 export const i128FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
 export const u128FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
-export const u64FromScVal  = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
-export const u32FromScVal  = (v: xdr.ScVal): number => Number(scValToNative(v));
-export const strFromScVal  = (v: xdr.ScVal): string => scValToNative(v) as string;
+export const u64FromScVal = (v: xdr.ScVal): bigint => BigInt(scValToNative(v) as string);
+export const u32FromScVal = (v: xdr.ScVal): number => Number(scValToNative(v));
+export const strFromScVal = (v: xdr.ScVal): string => scValToNative(v) as string;
 export const addrFromScVal = (v: xdr.ScVal): string => Address.fromScVal(v).toString();
 
 /**
@@ -83,11 +83,7 @@ export class CommerceClient extends BaseClient {
   }
 
   /** Provider submits a deliverable for a funded job. */
-  async submit(
-    provider: Keypair,
-    jobId: bigint,
-    deliverable: string,
-  ): Promise<void> {
+  async submit(provider: Keypair, jobId: bigint, deliverable: string): Promise<void> {
     const op = this.contract.call(
       "submit",
       new Address(provider.publicKey()).toScVal(),
@@ -123,10 +119,7 @@ export class CommerceClient extends BaseClient {
    * Throws on RPC/network errors so callers can distinguish not-found from outage.
    */
   async getJob(jobId: bigint): Promise<Job | null> {
-    const op = this.contract.call(
-      "get_job",
-      nativeToScVal(jobId, { type: "u64" }),
-    );
+    const op = this.contract.call("get_job", nativeToScVal(jobId, { type: "u64" }));
     return await this.simulateOption(op, (v) => {
       const native = scValToNative(v);
       return {
@@ -185,7 +178,9 @@ export class CommerceClient extends BaseClient {
   async getBalance(address: string, token: string): Promise<bigint> {
     if (token === "native") {
       const account = await this.server.getAccount(address);
-      const balances = (account as unknown as { balances?: Array<{ asset_type?: string; balance?: string }> }).balances ?? [];
+      const balances =
+        (account as unknown as { balances?: Array<{ asset_type?: string; balance?: string }> })
+          .balances ?? [];
       const xlmBalance = balances.find((b) => b.asset_type === "native");
       return BigInt(Math.round(Number(xlmBalance?.balance ?? "0") * 1e7));
     }
@@ -193,5 +188,4 @@ export class CommerceClient extends BaseClient {
     const op = tokenContract.call("balance", new Address(address).toScVal());
     return await this.simulate(op, (v) => BigInt(scValToNative(v) as string));
   }
-
 }

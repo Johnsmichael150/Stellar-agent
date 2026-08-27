@@ -90,47 +90,47 @@ const res = await fetch402("https://agent.example/api/summarize", {
 
 ### `IdentityClient`
 
-| Method | Description |
-|--------|-------------|
-| `register(keypair, uri)` | Register a new agent; returns `agentId: bigint` |
-| `getAgent(agentId)` | Fetch an `Agent` record by numeric ID |
-| `agentOf(address)` | Look up the `Agent` registered to a Stellar address |
-| `updateUri(keypair, agentId, newUri)` | Update the metadata URI |
+| Method                                           | Description                                                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `register(keypair, uri)`                         | Register a new agent; returns `agentId: bigint`                                                           |
+| `getAgent(agentId)`                              | Fetch an `Agent` record by numeric ID                                                                     |
+| `agentOf(address)`                               | Look up the `Agent` registered to a Stellar address                                                       |
+| `updateUri(keypair, agentId, newUri)`            | Update the metadata URI                                                                                   |
 | `updateOwner(keypair, agentId, newOwnerKeypair)` | Transfer the agent to a new wallet; requires signatures from both the current owner and `newOwnerKeypair` |
-| `deregister(keypair, agentId)` | Remove the agent registration |
+| `deregister(keypair, agentId)`                   | Remove the agent registration                                                                             |
 
 ### `CommerceClient`
 
-| Method | Description |
-|--------|-------------|
-| `createJob(keypair, provider, evaluator, token, budget, description)` | Create + fund an escrow job |
-| `submit(keypair, jobId, deliverable)` | Provider submits work |
-| `complete(keypair, jobId)` | Evaluator approves; triggers payout |
-| `cancel(keypair, jobId)` | Client cancels and recovers budget |
-| `getJob(jobId)` | Fetch a `Job` record |
-| `feeBps()` | Read the current protocol fee in basis points |
+| Method                                                                | Description                                   |
+| --------------------------------------------------------------------- | --------------------------------------------- |
+| `createJob(keypair, provider, evaluator, token, budget, description)` | Create + fund an escrow job                   |
+| `submit(keypair, jobId, deliverable)`                                 | Provider submits work                         |
+| `complete(keypair, jobId)`                                            | Evaluator approves; triggers payout           |
+| `cancel(keypair, jobId)`                                              | Client cancels and recovers budget            |
+| `getJob(jobId)`                                                       | Fetch a `Job` record                          |
+| `feeBps()`                                                            | Read the current protocol fee in basis points |
 
 ### `marcPaywall(opts)` — Express middleware
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `payee` | `string` | Stellar address that receives payment |
-| `price` | `number` | Amount in smallest token units |
-| `network` | `"testnet" \| "pubnet"` | Network (default: `"testnet"`) |
-| `token` | `string` | Token contract address (defaults to testnet USDC) |
+| Option    | Type                    | Description                                       |
+| --------- | ----------------------- | ------------------------------------------------- |
+| `payee`   | `string`                | Stellar address that receives payment             |
+| `price`   | `number`                | Amount in smallest token units                    |
+| `network` | `"testnet" \| "pubnet"` | Network (default: `"testnet"`)                    |
+| `token`   | `string`                | Token contract address (defaults to testnet USDC) |
 
 ### `marcFetch(opts)` — auto-paying fetch
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `signer` | `Keypair` | Keypair used to sign payment transactions |
-| `network` | `"testnet" \| "pubnet"` | Network (default: `"testnet"`) |
-| `rpcUrl` | `string?` | Custom Soroban RPC URL |
-| `headers` | `Record<string, string>?` | Custom HTTP headers forwarded on every request (e.g. API keys, auth tokens) |
-| `onPayment` | `(status: PaymentStatus) => void` | Payment lifecycle callback |
-| `timeoutMs` | `number?` | Per-request timeout in milliseconds |
-| `maxPaymentAttempts` | `number?` | Max 402-retry attempts (default: `1`) |
-| `fetchImpl` | `typeof fetch?` | Custom fetch implementation (tests / adapters) |
+| Option               | Type                              | Description                                                                 |
+| -------------------- | --------------------------------- | --------------------------------------------------------------------------- |
+| `signer`             | `Keypair`                         | Keypair used to sign payment transactions                                   |
+| `network`            | `"testnet" \| "pubnet"`           | Network (default: `"testnet"`)                                              |
+| `rpcUrl`             | `string?`                         | Custom Soroban RPC URL                                                      |
+| `headers`            | `Record<string, string>?`         | Custom HTTP headers forwarded on every request (e.g. API keys, auth tokens) |
+| `onPayment`          | `(status: PaymentStatus) => void` | Payment lifecycle callback                                                  |
+| `timeoutMs`          | `number?`                         | Per-request timeout in milliseconds                                         |
+| `maxPaymentAttempts` | `number?`                         | Max 402-retry attempts (default: `1`)                                       |
+| `fetchImpl`          | `typeof fetch?`                   | Custom fetch implementation (tests / adapters)                              |
 
 ### Network presets
 
@@ -142,12 +142,12 @@ Both presets expose `rpcUrl`, `networkPassphrase`, `identityContract`,
 `commerceContract`, and `usdcToken`. Contract addresses can be overridden via
 environment variables:
 
-| Variable | Description |
-|----------|-------------|
-| `MARC_TESTNET_IDENTITY_CONTRACT` | Override testnet identity contract |
-| `MARC_TESTNET_COMMERCE_CONTRACT` | Override testnet commerce contract |
-| `MARC_TESTNET_USDC_TOKEN` | Override testnet USDC token |
-| `STELLAR_RPC_URL` | Override RPC endpoint (both networks) |
+| Variable                         | Description                           |
+| -------------------------------- | ------------------------------------- |
+| `MARC_TESTNET_IDENTITY_CONTRACT` | Override testnet identity contract    |
+| `MARC_TESTNET_COMMERCE_CONTRACT` | Override testnet commerce contract    |
+| `MARC_TESTNET_USDC_TOKEN`        | Override testnet USDC token           |
+| `STELLAR_RPC_URL`                | Override RPC endpoint (both networks) |
 
 ## Types
 

@@ -41,15 +41,18 @@ const activeAgents = new Map<string, AgentEntry>();
 const REQUIRED_STRING_FIELDS = ["id", "name", "description", "url"] as const;
 
 function validateManifest(m: unknown): string | null {
-  if (typeof m !== "object" || m === null || Array.isArray(m)) return "manifest must be a JSON object";
+  if (typeof m !== "object" || m === null || Array.isArray(m))
+    return "manifest must be a JSON object";
   const obj = m as Record<string, unknown>;
   for (const field of REQUIRED_STRING_FIELDS) {
     if (typeof obj[field] !== "string" || !(obj[field] as string).trim()) {
       return `field "${field}" must be a non-empty string`;
     }
   }
-  if (typeof obj.price_usdc !== "number" || obj.price_usdc <= 0) return 'field "price_usdc" must be a positive number';
-  if (typeof obj.wallet !== "string" || !(obj.wallet as string).trim()) return 'field "wallet" must be a non-empty string';
+  if (typeof obj.price_usdc !== "number" || obj.price_usdc <= 0)
+    return 'field "price_usdc" must be a positive number';
+  if (typeof obj.wallet !== "string" || !(obj.wallet as string).trim())
+    return 'field "wallet" must be a non-empty string';
   // `tags` is optional but must be an array of strings when present
   if (obj.tags !== undefined) {
     if (!Array.isArray(obj.tags) || obj.tags.some((t) => typeof t !== "string")) {
@@ -72,11 +75,15 @@ function validateManifest(m: unknown): string | null {
  */
 function extractTags(manifest: Record<string, unknown>): string[] {
   if (Array.isArray(manifest.tags) && manifest.tags.length > 0) {
-    return [...new Set((manifest.tags as string[]).map((t) => t.toLowerCase().trim()).filter(Boolean))];
+    return [
+      ...new Set((manifest.tags as string[]).map((t) => t.toLowerCase().trim()).filter(Boolean)),
+    ];
   }
   // Fall back to tasks as implicit tags
   if (Array.isArray(manifest.tasks)) {
-    return [...new Set((manifest.tasks as string[]).map((t) => t.toLowerCase().trim()).filter(Boolean))];
+    return [
+      ...new Set((manifest.tasks as string[]).map((t) => t.toLowerCase().trim()).filter(Boolean)),
+    ];
   }
   return [];
 }
@@ -129,7 +136,9 @@ function loadManifest(agentId: string): Record<string, unknown> | null {
 function getRequestKey(req: any) {
   return (
     req.ip ||
-    String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() ||
+    String(req.headers["x-forwarded-for"] ?? "")
+      .split(",")[0]
+      .trim() ||
     "unknown"
   );
 }
@@ -217,8 +226,14 @@ app.post("/heartbeat", requireRegistryAuth, (req, res) => {
   res.json({ status: "ok", agentId, tags: extractTags(manifest) });
 });
 
-function filterByTags(agents: Record<string, unknown>[], rawTags: string): Record<string, unknown>[] {
-  const tags = rawTags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+function filterByTags(
+  agents: Record<string, unknown>[],
+  rawTags: string,
+): Record<string, unknown>[] {
+  const tags = rawTags
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
   if (tags.length === 0) return agents;
   return agents.filter((a) => {
     const agentTags = Array.isArray(a.tags) ? (a.tags as string[]).map((t) => t.toLowerCase()) : [];

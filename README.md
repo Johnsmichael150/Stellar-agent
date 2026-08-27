@@ -19,21 +19,21 @@ cargo test  # 19 unit tests
 
 ## Live Testnet Contracts
 
-| Contract | Address |
-|----------|---------|
-| Agent Identity | `CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5` |
+| Contract         | Address                                                    |
+| ---------------- | ---------------------------------------------------------- |
+| Agent Identity   | `CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5` |
 | Agentic Commerce | `CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE` |
-| USDC (SAC) | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
+| USDC (SAC)       | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
 
 ## Architecture
 
 Bear implements three layers of agent commerce:
 
-| Layer | Component | Description |
-|-------|-----------|-------------|
-| **Identity** | `agent-identity` | On-chain registry for AI agents. Each agent gets a unique ID, wallet binding, and metadata URI. Implements [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004). |
-| **Commerce** | `agentic-commerce` | Job escrow marketplace. Clients lock funds, providers deliver work, evaluators approve. Funds split 99/1 between provider and treasury. Implements [ERC-8183](https://eips.ethereum.org/EIPS/eip-8183). |
-| **Micropayments** | `marc-stellar-sdk` | x402 integration for per-API-call payments using HTTP 402 standard. |
+| Layer             | Component          | Description                                                                                                                                                                                             |
+| ----------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Identity**      | `agent-identity`   | On-chain registry for AI agents. Each agent gets a unique ID, wallet binding, and metadata URI. Implements [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004).                                         |
+| **Commerce**      | `agentic-commerce` | Job escrow marketplace. Clients lock funds, providers deliver work, evaluators approve. Funds split 99/1 between provider and treasury. Implements [ERC-8183](https://eips.ethereum.org/EIPS/eip-8183). |
+| **Micropayments** | `marc-stellar-sdk` | x402 integration for per-API-call payments using HTTP 402 standard.                                                                                                                                     |
 
 ```
 ┌─────────────┐     ┌─────────────────┐     ┌──────────────┐
@@ -44,15 +44,15 @@ Bear implements three layers of agent commerce:
 
 ## Tech Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Soroban** | Stellar smart contract platform (Rust → WASM) |
-| **Rust** | Smart contracts (`agent-identity`, `agentic-commerce`) |
-| **TypeScript** | SDK and agent implementations |
-| **Express** | Backend API server (16 routes) |
-| **x402** | HTTP 402 payment standard for micropayments |
-| **@x402/stellar** | Stellar payment facilitator integration |
-| **Freighter** | Browser wallet for signing transactions |
+| Technology        | Purpose                                                |
+| ----------------- | ------------------------------------------------------ |
+| **Soroban**       | Stellar smart contract platform (Rust → WASM)          |
+| **Rust**          | Smart contracts (`agent-identity`, `agentic-commerce`) |
+| **TypeScript**    | SDK and agent implementations                          |
+| **Express**       | Backend API server (16 routes)                         |
+| **x402**          | HTTP 402 payment standard for micropayments            |
+| **@x402/stellar** | Stellar payment facilitator integration                |
+| **Freighter**     | Browser wallet for signing transactions                |
 
 ## Project Structure
 
@@ -101,6 +101,7 @@ cargo build --release
 ### GitHub Authentication (Optional)
 
 For deployment workflows that require GitHub:
+
 ```bash
 gh auth login
 ```
@@ -115,6 +116,7 @@ cp demo/.env.example demo/.env
 ```
 
 > **Note:** The demo requires actual testnet wallets with USDC. Get testnet USDC and generate keypairs via:
+>
 > ```bash
 > # Generate a key and fund from faucet
 > stellar keys generate mykey --network testnet --fund
@@ -177,7 +179,14 @@ await identity.register(keypair, "https://ipfs.agent/metadata.json");
 
 // Create an escrow job
 const commerce = new CommerceClient(config);
-await commerce.createJob(keypair, provider, evaluator, TESTNET.usdcToken, 10_000_000n, "Analyze data");
+await commerce.createJob(
+  keypair,
+  provider,
+  evaluator,
+  TESTNET.usdcToken,
+  10_000_000n,
+  "Analyze data",
+);
 
 // Monetize an API endpoint
 app.use("/api/summarize", marcPaywall({ price: 1_000_000, token: "USDC" }));

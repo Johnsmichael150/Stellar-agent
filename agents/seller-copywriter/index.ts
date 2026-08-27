@@ -14,7 +14,11 @@ const OUTPUT_DIR = path.join(AGENT_DIR, "output");
 const OUTPUT_URL = "output";
 const publicUrl = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, "");
 
-const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
+const { app, seller, cfg } = await createSellerAgent({
+  id: AGENT_ID,
+  port: PORT,
+  agentDir: AGENT_DIR,
+});
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
@@ -43,11 +47,13 @@ app.post("/job", limiter, async (req, res) => {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { jobId, task, tone, audience, keywords } = req.body;
 
-  console.log(`[${AGENT_ID}] [req:${requestId}] Incoming POST /job — headers: ${JSON.stringify({
-    "content-type": req.headers["content-type"],
-    "user-agent": req.headers["user-agent"],
-    "x-forwarded-for": req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
-  })} — body: ${JSON.stringify(req.body)}`);
+  console.log(
+    `[${AGENT_ID}] [req:${requestId}] Incoming POST /job — headers: ${JSON.stringify({
+      "content-type": req.headers["content-type"],
+      "user-agent": req.headers["user-agent"],
+      "x-forwarded-for": req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
+    })} — body: ${JSON.stringify(req.body)}`,
+  );
 
   if (!jobId || isNaN(Number(jobId))) {
     console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: invalid jobId`);
@@ -63,7 +69,9 @@ app.post("/job", limiter, async (req, res) => {
     res.status(400).json({ error: "brandVoice must be an object" });
     return;
   }
-  console.log(`[${AGENT_ID}] Job #${jobId}: ${task}${brandVoice ? ` | brandVoice: ${JSON.stringify(brandVoice)}` : ""}`);
+  console.log(
+    `[${AGENT_ID}] Job #${jobId}: ${task}${brandVoice ? ` | brandVoice: ${JSON.stringify(brandVoice)}` : ""}`,
+  );
   res.json({ status: "accepted", jobId });
 
   try {
@@ -71,10 +79,14 @@ app.post("/job", limiter, async (req, res) => {
     const brandContext = [
       tone ? `Tone: ${tone}` : "",
       audience ? `Target audience: ${audience}` : "",
-      keywords?.length ? `Keywords to include: ${Array.isArray(keywords) ? keywords.join(", ") : keywords}` : "",
-    ].filter(Boolean).join("\n");
+      keywords?.length
+        ? `Keywords to include: ${Array.isArray(keywords) ? keywords.join(", ") : keywords}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     const copy = await generate(
-      `You are a professional copywriter. Write compelling website copy for:\n\n${task}${brandContext ? `\n\nBrand guidelines:\n${brandContext}` : ""}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`
+      `You are a professional copywriter. Write compelling website copy for:\n\n${task}${brandContext ? `\n\nBrand guidelines:\n${brandContext}` : ""}\n\nStructure in markdown: # Headline, ## Subheadline, ## Body, ## CTA.`,
     );
     if (copy.length < 20) {
       throw new Error(`Generated copy too short (${copy.length} chars)`);

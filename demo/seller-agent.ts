@@ -2,7 +2,13 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { Keypair } from "@stellar/stellar-sdk";
-import { IdentityClient, CommerceClient, marcPaywall, TESTNET, type MarcConfig } from "marc-stellar-sdk";
+import {
+  IdentityClient,
+  CommerceClient,
+  marcPaywall,
+  TESTNET,
+  type MarcConfig,
+} from "marc-stellar-sdk";
 
 const cfg: MarcConfig = {
   rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,
@@ -47,15 +53,18 @@ if (!agentId) {
 const app = express();
 app.use(cors());
 
-app.use("/api/work", marcPaywall({
-  payTo: seller.publicKey(),
-  price: servicePrice,           // ← driven by env var, not hardcoded
-  network: "stellar:testnet",
-  token: cfg.usdcToken,
-  description: "One MARC-protected API call",
-  facilitatorUrl: process.env.FACILITATOR_URL ?? process.env.X402_FACILITATOR_URL,
-  facilitatorApiKey: process.env.FACILITATOR_API_KEY ?? process.env.X402_FACILITATOR_API_KEY,
-}));
+app.use(
+  "/api/work",
+  marcPaywall({
+    payTo: seller.publicKey(),
+    price: servicePrice, // ← driven by env var, not hardcoded
+    network: "stellar:testnet",
+    token: cfg.usdcToken,
+    description: "One MARC-protected API call",
+    facilitatorUrl: process.env.FACILITATOR_URL ?? process.env.X402_FACILITATOR_URL,
+    facilitatorApiKey: process.env.FACILITATOR_API_KEY ?? process.env.X402_FACILITATOR_API_KEY,
+  }),
+);
 
 app.get("/api/work", (_req, res) => {
   console.log(`[2] Work request received — payment verified`);

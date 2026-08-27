@@ -14,7 +14,11 @@ const AGENT_ID = "seller-researcher";
 const OUTPUT_DIR = path.join(AGENT_DIR, "output");
 const OUTPUT_FILE = path.join(OUTPUT_DIR, "research.json");
 
-const { app, seller, cfg } = await createSellerAgent({ id: AGENT_ID, port: PORT, agentDir: AGENT_DIR });
+const { app, seller, cfg } = await createSellerAgent({
+  id: AGENT_ID,
+  port: PORT,
+  agentDir: AGENT_DIR,
+});
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
@@ -27,9 +31,16 @@ interface ResearchOutput {
 type ResearchDepth = "brief" | "standard" | "deep";
 
 const DEPTH_CONFIG: Record<ResearchDepth, { sourceRange: string; detail: string }> = {
-  brief:    { sourceRange: "2-3", detail: "Write a concise 1-2 paragraph summary." },
-  standard: { sourceRange: "3-8", detail: "Write a comprehensive multi-section summary in markdown." },
-  deep:     { sourceRange: "8-15", detail: "Write an exhaustive, deeply detailed analysis with sections, subsections, key findings, and critical evaluation of sources." },
+  brief: { sourceRange: "2-3", detail: "Write a concise 1-2 paragraph summary." },
+  standard: {
+    sourceRange: "3-8",
+    detail: "Write a comprehensive multi-section summary in markdown.",
+  },
+  deep: {
+    sourceRange: "8-15",
+    detail:
+      "Write an exhaustive, deeply detailed analysis with sections, subsections, key findings, and critical evaluation of sources.",
+  },
 };
 
 async function generate(task: string, depth: ResearchDepth = "standard"): Promise<ResearchOutput> {
@@ -71,11 +82,13 @@ app.post("/job", limiter, async (req, res) => {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { jobId, task, depth } = req.body;
 
-  console.log(`[${AGENT_ID}] [req:${requestId}] Incoming POST /job — headers: ${JSON.stringify({
-    "content-type": req.headers["content-type"],
-    "user-agent": req.headers["user-agent"],
-    "x-forwarded-for": req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
-  })} — body: ${JSON.stringify(req.body)}`);
+  console.log(
+    `[${AGENT_ID}] [req:${requestId}] Incoming POST /job — headers: ${JSON.stringify({
+      "content-type": req.headers["content-type"],
+      "user-agent": req.headers["user-agent"],
+      "x-forwarded-for": req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
+    })} — body: ${JSON.stringify(req.body)}`,
+  );
 
   if (!jobId || isNaN(Number(jobId))) {
     console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: invalid jobId`);
@@ -87,7 +100,9 @@ app.post("/job", limiter, async (req, res) => {
     res.status(400).json({ error: "missing task" });
     return;
   }
-  const resolvedDepth: ResearchDepth = ["brief", "standard", "deep"].includes(depth) ? depth : "standard";
+  const resolvedDepth: ResearchDepth = ["brief", "standard", "deep"].includes(depth)
+    ? depth
+    : "standard";
   console.log(`[${AGENT_ID}] Job #${jobId} (depth=${resolvedDepth}): ${task}`);
   const response = { status: "accepted", jobId, depth: resolvedDepth };
   console.log(`[${AGENT_ID}] [req:${requestId}] Response: ${JSON.stringify(response)}`);
@@ -99,7 +114,9 @@ app.post("/job", limiter, async (req, res) => {
     const sourceCount = research.sources.length;
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(research, null, 2));
-    console.log(`[${AGENT_ID}] Research done: ${research.summary.length} chars, ${sourceCount} sources`);
+    console.log(
+      `[${AGENT_ID}] Research done: ${research.summary.length} chars, ${sourceCount} sources`,
+    );
 
     const commerce = new CommerceClient(cfg);
     await retryWithBackoff(

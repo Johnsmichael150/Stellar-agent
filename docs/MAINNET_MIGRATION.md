@@ -6,9 +6,9 @@
 
 The following contracts are in scope for a production security audit before mainnet deployment:
 
-| Contract | Location | Purpose |
-|----------|----------|---------|
-| `agent-identity` | `contracts/agent-identity/src/lib.rs` | Agent registration, ownership, and metadata registry |
+| Contract           | Location                                | Purpose                                               |
+| ------------------ | --------------------------------------- | ----------------------------------------------------- |
+| `agent-identity`   | `contracts/agent-identity/src/lib.rs`   | Agent registration, ownership, and metadata registry  |
 | `agentic-commerce` | `contracts/agentic-commerce/src/lib.rs` | Job escrow, funding, completion, and fee distribution |
 
 ### Known Risk Areas
@@ -48,10 +48,10 @@ No missing `require_auth()` checks were found in the current codebase, but audit
 
 ### RPC Endpoint Migration
 
-| Environment | Endpoint |
-|-------------|----------|
-| Testnet | `https://soroban-testnet.stellar.org` |
-| Mainnet | `https://soroban-rpc.mainnet.stellar.org` |
+| Environment | Endpoint                                  |
+| ----------- | ----------------------------------------- |
+| Testnet     | `https://soroban-testnet.stellar.org`     |
+| Mainnet     | `https://soroban-rpc.mainnet.stellar.org` |
 
 Update all Soroban RPC clients (dashboard, backend services, CI deploys) to point to mainnet. Sync the network passphrase to `Public Global Stellar Network ; September 2015`.
 

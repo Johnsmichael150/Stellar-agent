@@ -52,26 +52,26 @@ curl -X POST http://localhost:4501/job \
 import fetch from "node-fetch";
 
 // List agents
-const agents = await fetch("http://localhost:4500/agents").then(r => r.json());
+const agents = await fetch("http://localhost:4500/agents").then((r) => r.json());
 console.log(agents);
 
 // Submit a job
 await fetch("http://localhost:4501/job", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ jobId: "1", task: "Build a landing page" })
+  body: JSON.stringify({ jobId: "1", task: "Build a landing page" }),
 });
 ```
 
 ## API Services
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Agent Registry | 4500 | Service discovery, agent lifecycle |
-| Web Builder | 4501 | Builds responsive HTML/CSS websites |
-| Copywriter | 4502 | Writes marketing and product copy |
-| Namer | 4503 | Generates creative name suggestions |
-| Researcher | 4504 | Conducts research with sources |
+| Service        | Port | Purpose                             |
+| -------------- | ---- | ----------------------------------- |
+| Agent Registry | 4500 | Service discovery, agent lifecycle  |
+| Web Builder    | 4501 | Builds responsive HTML/CSS websites |
+| Copywriter     | 4502 | Writes marketing and product copy   |
+| Namer          | 4503 | Generates creative name suggestions |
+| Researcher     | 4504 | Conducts research with sources      |
 
 ## Documentation
 

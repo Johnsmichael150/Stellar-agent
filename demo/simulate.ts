@@ -44,7 +44,9 @@ function decodeScVal(raw: unknown): unknown {
   for (const enc of ["hex", "base64"] as const) {
     try {
       return scValToNative(xdr.ScVal.fromXDR(raw, enc));
-    } catch { /* try next encoding */ }
+    } catch {
+      /* try next encoding */
+    }
   }
   return raw;
 }
@@ -86,11 +88,13 @@ async function fundUsdc(publicKey: string): Promise<void> {
 async function setupKeypairs(count: number, role: string): Promise<Keypair[]> {
   const kps = Array.from({ length: count }, () => Keypair.random());
   console.log(`\nFunding ${count} ${role} accounts...`);
-  await Promise.all(kps.map(async (kp, i) => {
-    await fundAccount(kp.publicKey());
-    if (role === "buyer") await fundUsdc(kp.publicKey());
-    console.log(`  ${tag(role, i + 1)} funded: ${kp.publicKey()}`);
-  }));
+  await Promise.all(
+    kps.map(async (kp, i) => {
+      await fundAccount(kp.publicKey());
+      if (role === "buyer") await fundUsdc(kp.publicKey());
+      console.log(`  ${tag(role, i + 1)} funded: ${kp.publicKey()}`);
+    }),
+  );
   return kps;
 }
 
@@ -106,15 +110,18 @@ async function startSeller(kp: Keypair, index: number): Promise<{ agent: Agent; 
   const app = express();
   app.use(cors());
 
-  app.use("/api/work", marcPaywall({
-    payTo: kp.publicKey(),
-    price: "$0.01",
-    network: "stellar:testnet",
-    token: cfg.usdcToken,
-    description: `Work from seller-${index}`,
-    facilitatorUrl: process.env.X402_FACILITATOR_URL,
-    facilitatorApiKey: process.env.X402_FACILITATOR_API_KEY,
-  }));
+  app.use(
+    "/api/work",
+    marcPaywall({
+      payTo: kp.publicKey(),
+      price: "$0.01",
+      network: "stellar:testnet",
+      token: cfg.usdcToken,
+      description: `Work from seller-${index}`,
+      facilitatorUrl: process.env.X402_FACILITATOR_URL,
+      facilitatorApiKey: process.env.X402_FACILITATOR_API_KEY,
+    }),
+  );
 
   app.get("/api/work", (_req, res) => {
     res.json({ result: `Report from seller-${index} at ${Date.now()}`, seller: kp.publicKey() });
@@ -154,7 +161,7 @@ async function runBuyer(
     kp.publicKey(), // buyer = evaluator in demo
     cfg.usdcToken,
     BUDGET,
-    `Job from buyer-${index} to seller-${(index - 1) % sellers.length + 1}`,
+    `Job from buyer-${index} to seller-${((index - 1) % sellers.length) + 1}`,
   );
   console.log(`${t} job #${jobId} created — 1 USDC locked in escrow`);
 
@@ -171,7 +178,9 @@ async function runBuyer(
   // Buyer (evaluator) completes job → 99/1 split
   await commerce.complete(kp, jobId);
   const job = await commerce.getJob(jobId);
-  console.log(`${t} job #${jobId} completed — status: ${job?.status ?? "unknown"} — 99% to seller, 1% fee`);
+  console.log(
+    `${t} job #${jobId} completed — status: ${job?.status ?? "unknown"} — 99% to seller, 1% fee`,
+  );
 }
 
 // --- Stress test: N parallel jobs, each with its own seller+buyer keypair ---
@@ -242,7 +251,9 @@ async function runStressTest(n: number): Promise<void> {
     jobSlots.map(async ({ jobId, index }) => {
       const job = await commerce.getJob(jobId);
       const pass = job?.status === JobStatus.Completed;
-      console.log(`  [${index}/${n}] job #${jobId}: ${pass ? "PASS" : "FAIL"} (status=${job?.status ?? "null"})`);
+      console.log(
+        `  [${index}/${n}] job #${jobId}: ${pass ? "PASS" : "FAIL"} (status=${job?.status ?? "null"})`,
+      );
       return pass;
     }),
   );

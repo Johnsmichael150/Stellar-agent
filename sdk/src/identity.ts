@@ -56,10 +56,7 @@ export class IdentityClient extends BaseClient {
 
   /** Look up an agent by its numeric ID. Returns null if not found. */
   async getAgent(id: bigint): Promise<Agent | null> {
-    const op = this.contract.call(
-      "get_agent",
-      nativeToScVal(id, { type: "u64" }),
-    );
+    const op = this.contract.call("get_agent", nativeToScVal(id, { type: "u64" }));
     return await this.simulate(op, (v) => {
       const native = scValToNative(v);
       if (!native) return null;
@@ -73,10 +70,7 @@ export class IdentityClient extends BaseClient {
 
   /** Reverse-lookup: find the agent ID owned by `owner`. */
   async agentOf(owner: string): Promise<bigint | null> {
-    const op = this.contract.call(
-      "agent_of",
-      new Address(owner).toScVal(),
-    );
+    const op = this.contract.call("agent_of", new Address(owner).toScVal());
     return await this.simulate(op, (v) => {
       const native = scValToNative(v);
       return native == null ? null : BigInt(native);
@@ -145,7 +139,9 @@ export class IdentityClient extends BaseClient {
   async getBalance(address: string, token: string): Promise<bigint> {
     if (token === "native") {
       const account = await this.server.getAccount(address);
-      const balances = (account as unknown as { balances?: Array<{ asset_type?: string; balance?: string }> }).balances ?? [];
+      const balances =
+        (account as unknown as { balances?: Array<{ asset_type?: string; balance?: string }> })
+          .balances ?? [];
       const xlmBalance = balances.find((b) => b.asset_type === "native");
       return BigInt(Math.round(Number(xlmBalance?.balance ?? "0") * 1e7));
     }
@@ -157,7 +153,12 @@ export class IdentityClient extends BaseClient {
   // --- internals ---
 
   /** Submit a transaction signed by two keypairs (old owner + new owner). */
-  private async invokeMultiSig(signer1: Keypair, signer2: Keypair, op: xdr.Operation, txLabel: string): Promise<void> {
+  private async invokeMultiSig(
+    signer1: Keypair,
+    signer2: Keypair,
+    op: xdr.Operation,
+    txLabel: string,
+  ): Promise<void> {
     const account = await this.server.getAccount(signer1.publicKey());
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,

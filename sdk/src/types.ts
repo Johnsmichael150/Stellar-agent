@@ -166,9 +166,15 @@ function getEnvValue(name: string) {
 }
 
 function resolveDeploymentValues(network: "testnet" | "mainnet") {
-  const envIdentity = getEnvValue(network === "testnet" ? "MARC_TESTNET_IDENTITY_CONTRACT" : "MARC_MAINNET_IDENTITY_CONTRACT");
-  const envCommerce = getEnvValue(network === "testnet" ? "MARC_TESTNET_COMMERCE_CONTRACT" : "MARC_MAINNET_COMMERCE_CONTRACT");
-  const envUsdc = getEnvValue(network === "testnet" ? "MARC_TESTNET_USDC_TOKEN" : "MARC_MAINNET_USDC_TOKEN");
+  const envIdentity = getEnvValue(
+    network === "testnet" ? "MARC_TESTNET_IDENTITY_CONTRACT" : "MARC_MAINNET_IDENTITY_CONTRACT",
+  );
+  const envCommerce = getEnvValue(
+    network === "testnet" ? "MARC_TESTNET_COMMERCE_CONTRACT" : "MARC_MAINNET_COMMERCE_CONTRACT",
+  );
+  const envUsdc = getEnvValue(
+    network === "testnet" ? "MARC_TESTNET_USDC_TOKEN" : "MARC_MAINNET_USDC_TOKEN",
+  );
 
   if (envIdentity || envCommerce || envUsdc) {
     return {
@@ -179,11 +185,17 @@ function resolveDeploymentValues(network: "testnet" | "mainnet") {
   }
 
   try {
-    const deploymentPath = fileURLToPath(new URL(`../../deployments/${network}.json`, import.meta.url));
+    const deploymentPath = fileURLToPath(
+      new URL(`../../deployments/${network}.json`, import.meta.url),
+    );
     const deploymentConfig = JSON.parse(readFileSync(deploymentPath, "utf8"));
     return {
-      identityContract: (deploymentConfig.agent_identity || deploymentConfig.identityContract || "") as Address,
-      commerceContract: (deploymentConfig.agentic_commerce || deploymentConfig.commerceContract || "") as Address,
+      identityContract: (deploymentConfig.agent_identity ||
+        deploymentConfig.identityContract ||
+        "") as Address,
+      commerceContract: (deploymentConfig.agentic_commerce ||
+        deploymentConfig.commerceContract ||
+        "") as Address,
       usdcToken: (deploymentConfig.usdcToken || "") as Address,
     };
   } catch {
@@ -341,8 +353,4 @@ export interface JobCancelledEvent {
 
 /** Discriminated union of all agentic-commerce contract events. */
 export type JobEvent =
-  | JobCreatedEvent
-  | JobSubmittedEvent
-  | JobCompletedEvent
-  | JobRefundedEvent
-  | JobCancelledEvent;
+  JobCreatedEvent | JobSubmittedEvent | JobCompletedEvent | JobRefundedEvent | JobCancelledEvent;

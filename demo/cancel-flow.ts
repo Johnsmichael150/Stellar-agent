@@ -45,12 +45,9 @@ import {
 
 const cfg: MarcConfig = {
   rpcUrl: process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl,
-  networkPassphrase:
-    process.env.STELLAR_NETWORK_PASSPHRASE ?? TESTNET.networkPassphrase,
-  identityContract:
-    process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
-  commerceContract:
-    process.env.AGENTIC_COMMERCE_CONTRACT || TESTNET.commerceContract,
+  networkPassphrase: process.env.STELLAR_NETWORK_PASSPHRASE ?? TESTNET.networkPassphrase,
+  identityContract: process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
+  commerceContract: process.env.AGENTIC_COMMERCE_CONTRACT || TESTNET.commerceContract,
   usdcToken: process.env.USDC_TOKEN_CONTRACT || TESTNET.usdcToken,
 };
 
@@ -80,9 +77,7 @@ async function pollWithBackoff(
     const done = await fn();
     if (done) return;
     if (attempt === maxAttempts) throw new Error(`Timed out waiting for: ${label}`);
-    console.log(
-      `  [poll] ${label} — attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms…`,
-    );
+    console.log(`  [poll] ${label} — attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms…`);
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay * multiplier, capMs);
   }
@@ -95,10 +90,7 @@ async function pollWithBackoff(
 async function getUsdc(pubkey: string): Promise<string> {
   try {
     const server = new rpc.Server(cfg.rpcUrl, { allowHttp: false });
-    const op = new Contract(cfg.usdcToken).call(
-      "balance",
-      new Address(pubkey).toScVal(),
-    );
+    const op = new Contract(cfg.usdcToken).call("balance", new Address(pubkey).toScVal());
     const dummy = new Account(Keypair.random().publicKey(), "0");
     const tx = new TransactionBuilder(dummy, {
       fee: BASE_FEE,
@@ -110,14 +102,9 @@ async function getUsdc(pubkey: string): Promise<string> {
     const sim = await server.simulateTransaction(tx);
     if (rpc.Api.isSimulationError(sim)) return "0.00";
     const val = BigInt(
-      scValToNative(
-        (sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval,
-      ),
+      scValToNative((sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval),
     );
-    return `${val / 10_000_000n}.${(val % 10_000_000n)
-      .toString()
-      .padStart(7, "0")
-      .slice(0, 2)}`;
+    return `${val / 10_000_000n}.${(val % 10_000_000n).toString().padStart(7, "0").slice(0, 2)}`;
   } catch {
     return "0.00";
   }
@@ -190,8 +177,7 @@ console.log(`    Job status: ${job?.status}`);
 const balanceAfterCancel = await getUsdc(buyer.publicKey());
 console.log(`[5] Buyer USDC after cancellation : ${balanceAfterCancel}`);
 
-const refunded =
-  parseFloat(balanceAfterCancel) >= parseFloat(balanceBefore) - 0.001; // allow small fee tolerance
+const refunded = parseFloat(balanceAfterCancel) >= parseFloat(balanceBefore) - 0.001; // allow small fee tolerance
 if (refunded) {
   console.log(`\n✅  Refund confirmed — budget returned to buyer.`);
 } else {

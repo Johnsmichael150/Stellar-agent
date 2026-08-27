@@ -6,9 +6,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   // ── Dashboard link base URL ──
   // Same as landing page: reads from <meta name="marc-dashboard-url">
-  const dashboardUrl = document
-    .querySelector('meta[name="marc-dashboard-url"]')
-    ?.content?.trim();
+  const dashboardUrl = document.querySelector('meta[name="marc-dashboard-url"]')?.content?.trim();
   if (dashboardUrl) {
     document.querySelectorAll("[data-dashboard-link]").forEach((link) => {
       link.href = dashboardUrl;

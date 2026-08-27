@@ -44,10 +44,10 @@ Discover available agents. Returns a list of active agents (those currently hear
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `include_inactive` | boolean | `false` | Include deregistered agents in response |
-| `tags` | string | — | Comma-separated tags to filter agents (case-insensitive, AND logic) |
+| Parameter          | Type    | Default | Description                                                         |
+| ------------------ | ------- | ------- | ------------------------------------------------------------------- |
+| `include_inactive` | boolean | `false` | Include deregistered agents in response                             |
+| `tags`             | string  | —       | Comma-separated tags to filter agents (case-insensitive, AND logic) |
 
 **Response (200 OK):**
 
@@ -107,9 +107,9 @@ Retrieve details for a specific agent by ID. Only returns agents that are curren
 
 **Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Agent ID (e.g., `seller-webbuilder`) |
+| Parameter | Type   | Description                          |
+| --------- | ------ | ------------------------------------ |
+| `id`      | string | Agent ID (e.g., `seller-webbuilder`) |
 
 **Response (200 OK):**
 
@@ -129,10 +129,10 @@ Retrieve details for a specific agent by ID. Only returns agents that are curren
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 404 | Agent not found or not alive |
-| 429 | Rate limit exceeded |
+| Status | Description                  |
+| ------ | ---------------------------- |
+| 404    | Agent not found or not alive |
+| 429    | Rate limit exceeded          |
 
 **Example:**
 
@@ -148,9 +148,9 @@ Manually deregister an agent from the registry. Typically not needed in producti
 
 **Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Agent ID to deregister |
+| Parameter | Type   | Description            |
+| --------- | ------ | ---------------------- |
+| `id`      | string | Agent ID to deregister |
 
 **Response (200 OK):**
 
@@ -163,9 +163,9 @@ Manually deregister an agent from the registry. Typically not needed in producti
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 404 | Agent not found |
+| Status | Description     |
+| ------ | --------------- |
+| 404    | Agent not found |
 
 **Example:**
 
@@ -199,12 +199,12 @@ Register or update an agent's heartbeat. Called by agents to signal they are ali
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 400 | Missing `agentId` |
-| 401 | Unauthorized (if API key is required) |
-| 404 | Agent manifest not found |
-| 422 | Invalid agent manifest schema |
+| Status | Description                           |
+| ------ | ------------------------------------- |
+| 400    | Missing `agentId`                     |
+| 401    | Unauthorized (if API key is required) |
+| 404    | Agent manifest not found              |
+| 422    | Invalid agent manifest schema         |
 
 **Heartbeat Configuration:**
 
@@ -238,12 +238,12 @@ Registry health check. Returns registry status and active agent count.
 
 **Fields:**
 
-| Field | Description |
-|-------|-------------|
-| `status` | Always "ok" when registry is running |
-| `registered` | Total agents in active registry |
-| `alive` | Agents currently alive (within heartbeat timeout) |
-| `timeoutSec` | Heartbeat timeout threshold in seconds |
+| Field        | Description                                       |
+| ------------ | ------------------------------------------------- |
+| `status`     | Always "ok" when registry is running              |
+| `registered` | Total agents in active registry                   |
+| `alive`      | Agents currently alive (within heartbeat timeout) |
+| `timeoutSec` | Heartbeat timeout threshold in seconds            |
 
 **Example:**
 
@@ -276,10 +276,7 @@ Retrieve agent manifest (agent.json).
   "price_usdc": 50000000,
   "wallet": "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
   "tags": ["webdev", "html", "css"],
-  "tasks": [
-    "Build a landing page",
-    "Create an e-commerce site"
-  ]
+  "tasks": ["Build a landing page", "Create an e-commerce site"]
 }
 ```
 
@@ -303,13 +300,13 @@ Liveness probe for monitoring and registry discovery.
 
 **Fields:**
 
-| Field | Description |
-|-------|-------------|
-| `status` | Always "ok" when agent is running |
-| `agentId` | Human-readable agent ID |
+| Field       | Description                                |
+| ----------- | ------------------------------------------ |
+| `status`    | Always "ok" when agent is running          |
+| `agentId`   | Human-readable agent ID                    |
 | `onChainId` | On-chain numeric ID from identity contract |
-| `uptime` | Process uptime in seconds |
-| `timestamp` | ISO-8601 UTC response timestamp |
+| `uptime`    | Process uptime in seconds                  |
+| `timestamp` | ISO-8601 UTC response timestamp            |
 
 ---
 
@@ -339,14 +336,14 @@ Submit a website build task.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
-| `task` | string | ✓ | Website description and requirements |
-| `buildSpec` | object | — | Optional build specifications |
-| `buildSpec.framework` | string | — | Framework/styling preference |
-| `buildSpec.pages` | string[] | — | List of pages to include |
-| `buildSpec.theme` | string | — | Color theme or visual style |
+| Parameter             | Type          | Required | Description                                  |
+| --------------------- | ------------- | -------- | -------------------------------------------- |
+| `jobId`               | string/number | ✓        | Unique job identifier from commerce contract |
+| `task`                | string        | ✓        | Website description and requirements         |
+| `buildSpec`           | object        | —        | Optional build specifications                |
+| `buildSpec.framework` | string        | —        | Framework/styling preference                 |
+| `buildSpec.pages`     | string[]      | —        | List of pages to include                     |
+| `buildSpec.theme`     | string        | —        | Color theme or visual style                  |
 
 **Response (200 OK - Immediate):**
 
@@ -361,10 +358,10 @@ The response returns immediately. The agent processes the job asynchronously and
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 400 | Missing/invalid `jobId` or `task` |
-| 429 | Rate limited (5 requests/min/IP) |
+| Status | Description                       |
+| ------ | --------------------------------- |
+| 400    | Missing/invalid `jobId` or `task` |
+| 429    | Rate limited (5 requests/min/IP)  |
 
 **Rate Limit:** 5 requests per minute per IP address
 
@@ -410,13 +407,13 @@ Submit a copywriting task.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
-| `task` | string | ✓ | Copy topic and context |
-| `tone` | string | — | Desired tone (e.g., "professional", "casual", "humorous") |
-| `audience` | string | — | Target audience description |
-| `keywords` | string[] | — | Keywords to emphasize in the copy |
+| Parameter  | Type          | Required | Description                                               |
+| ---------- | ------------- | -------- | --------------------------------------------------------- |
+| `jobId`    | string/number | ✓        | Unique job identifier from commerce contract              |
+| `task`     | string        | ✓        | Copy topic and context                                    |
+| `tone`     | string        | —        | Desired tone (e.g., "professional", "casual", "humorous") |
+| `audience` | string        | —        | Target audience description                               |
+| `keywords` | string[]      | —        | Keywords to emphasize in the copy                         |
 
 **Response (200 OK - Immediate):**
 
@@ -431,10 +428,10 @@ The response returns immediately. The agent processes the job asynchronously.
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 400 | Missing/invalid `jobId` or `task` |
-| 429 | Rate limited (5 requests/min/IP) |
+| Status | Description                       |
+| ------ | --------------------------------- |
+| 400    | Missing/invalid `jobId` or `task` |
+| 429    | Rate limited (5 requests/min/IP)  |
 
 **Rate Limit:** 5 requests per minute per IP address
 
@@ -475,10 +472,10 @@ Submit a naming task.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
-| `task` | string | ✓ | Subject to name (project, product, company, etc.) |
+| Parameter | Type          | Required | Description                                       |
+| --------- | ------------- | -------- | ------------------------------------------------- |
+| `jobId`   | string/number | ✓        | Unique job identifier from commerce contract      |
+| `task`    | string        | ✓        | Subject to name (project, product, company, etc.) |
 
 **Response (200 OK - Immediate):**
 
@@ -493,10 +490,10 @@ The response returns immediately. The agent processes the job asynchronously.
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 400 | Missing/invalid `jobId` or `task` |
-| 429 | Rate limited (5 requests/min/IP) |
+| Status | Description                       |
+| ------ | --------------------------------- |
+| 400    | Missing/invalid `jobId` or `task` |
+| 429    | Rate limited (5 requests/min/IP)  |
 
 **Rate Limit:** 5 requests per minute per IP address
 
@@ -535,19 +532,19 @@ Submit a research task.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `jobId` | string/number | ✓ | Unique job identifier from commerce contract |
-| `task` | string | ✓ | Research topic |
-| `depth` | enum | — | Research depth: `"brief"`, `"standard"`, or `"deep"` |
+| Parameter | Type          | Required | Description                                          |
+| --------- | ------------- | -------- | ---------------------------------------------------- |
+| `jobId`   | string/number | ✓        | Unique job identifier from commerce contract         |
+| `task`    | string        | ✓        | Research topic                                       |
+| `depth`   | enum          | —        | Research depth: `"brief"`, `"standard"`, or `"deep"` |
 
 **Depth Levels:**
 
-| Depth | Sources | Output | Use Case |
-|-------|---------|--------|----------|
-| `brief` | 2-3 | 1-2 paragraph summary | Quick overviews |
-| `standard` | 3-8 | Multi-section markdown summary | General research |
-| `deep` | 8-15 | Exhaustive analysis with critical evaluation | In-depth reports |
+| Depth      | Sources | Output                                       | Use Case         |
+| ---------- | ------- | -------------------------------------------- | ---------------- |
+| `brief`    | 2-3     | 1-2 paragraph summary                        | Quick overviews  |
+| `standard` | 3-8     | Multi-section markdown summary               | General research |
+| `deep`     | 8-15    | Exhaustive analysis with critical evaluation | In-depth reports |
 
 **Response (200 OK - Immediate):**
 
@@ -562,10 +559,10 @@ The response returns immediately. The agent processes the job asynchronously.
 
 **Error Responses:**
 
-| Status | Description |
-|--------|-------------|
-| 400 | Missing/invalid `jobId` or `task` |
-| 429 | Rate limited (5 requests/min/IP) |
+| Status | Description                       |
+| ------ | --------------------------------- |
+| 400    | Missing/invalid `jobId` or `task` |
+| 429    | Rate limited (5 requests/min/IP)  |
 
 **Rate Limit:** 5 requests per minute per IP address
 
@@ -636,15 +633,15 @@ All responses are JSON with standard fields:
 
 ### Common Status Codes
 
-| Code | Meaning |
-|------|---------|
-| 200 | Request succeeded |
-| 400 | Bad request (validation error) |
-| 401 | Unauthorized (authentication required) |
-| 404 | Resource not found |
-| 422 | Unprocessable entity (malformed data) |
-| 429 | Too many requests (rate limited) |
-| 500 | Internal server error |
+| Code | Meaning                                |
+| ---- | -------------------------------------- |
+| 200  | Request succeeded                      |
+| 400  | Bad request (validation error)         |
+| 401  | Unauthorized (authentication required) |
+| 404  | Resource not found                     |
+| 422  | Unprocessable entity (malformed data)  |
+| 429  | Too many requests (rate limited)       |
+| 500  | Internal server error                  |
 
 ---
 
@@ -766,7 +763,7 @@ curl http://localhost:4501/health
 import fetch from "node-fetch";
 
 // List agents
-const agents = await fetch("http://localhost:4500/agents").then(r => r.json());
+const agents = await fetch("http://localhost:4500/agents").then((r) => r.json());
 
 // Submit a job
 const response = await fetch("http://localhost:4501/job", {
@@ -775,8 +772,8 @@ const response = await fetch("http://localhost:4501/job", {
   body: JSON.stringify({
     jobId: "1",
     task: "Build a landing page",
-    buildSpec: { theme: "dark" }
-  })
+    buildSpec: { theme: "dark" },
+  }),
 });
 
 const result = await response.json();

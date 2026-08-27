@@ -3,7 +3,7 @@
 /**
  * Development server for the Bear landing page.
  * Serves static files (index.html, style.css, app.js, etc.) and the API endpoint.
- * 
+ *
  * Usage: npm run dev
  * Then visit http://localhost:3001
  */
@@ -27,27 +27,63 @@ const MIME_TYPES = {
   ".xml": "text/xml",
 };
 
-// API route handler
+// API route handler — reads from deployments/testnet.json
+const FALLBACK_CONTRACTS = {
+  agent_identity: {
+    address: "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
+    explorer: "https://stellar.expert/explorer/testnet/contract/CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
+  },
+  agentic_commerce: {
+    address: "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
+    explorer: "https://stellar.expert/explorer/testnet/contract/CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
+  },
+};
+
+function loadDeployments() {
+  try {
+    const deploymentsPath = path.join(__dirname, "..", "deployments", "testnet.json");
+    const raw = fs.readFileSync(deploymentsPath, "utf-8");
+    const data = JSON.parse(raw);
+    const out = {};
+    for (const [key, addr] of Object.entries(data)) {
+      if (typeof addr !== "string") continue;
+      out[key] = {
+        address: addr,
+        explorer: `https://stellar.expert/explorer/testnet/contract/${addr}`,
+      };
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 function handleApiRequest(req, res) {
   if (req.url === "/api/contract-addresses" && req.method === "GET") {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     res.setHeader("Content-Type", "application/json");
 
+    const live = loadDeployments();
+    const contracts = live || FALLBACK_CONTRACTS;
+
     const response = {
       network: "testnet",
       contracts: {
         agent_identity: {
           address: "CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
-          explorer: "https://stellar.expert/explorer/testnet/contract/CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
+          explorer:
+            "https://stellar.expert/explorer/testnet/contract/CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5",
         },
         agentic_commerce: {
           address: "CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
-          explorer: "https://stellar.expert/explorer/testnet/contract/CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
+          explorer:
+            "https://stellar.expert/explorer/testnet/contract/CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE",
         },
         usdc_sac: {
           address: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-          explorer: "https://stellar.expert/explorer/testnet/contract/CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+          explorer:
+            "https://stellar.expert/explorer/testnet/contract/CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
         },
       },
       timestamp: new Date().toISOString(),

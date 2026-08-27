@@ -85,7 +85,8 @@
     loadDict(lang).then(function (dict) {
       var resolved = dict || {};
       applyTranslations(resolved);
-      if (switcher) switcher.setAttribute("aria-label", resolve(resolved, "lang.label") || "Language");
+      if (switcher)
+        switcher.setAttribute("aria-label", resolve(resolved, "lang.label") || "Language");
     });
   }
 

@@ -29,11 +29,7 @@ function pause(label: string): Promise<void> {
   });
 }
 
-const X402_FAIL_PATTERNS = [
-  "Payment verification failed",
-  "x402.*fail",
-  "settle.*fail",
-];
+const X402_FAIL_PATTERNS = ["Payment verification failed", "x402.*fail", "settle.*fail"];
 
 function log(msg: string) {
   console.log(`[lifecycle] ${new Date().toISOString()} ${msg}`);
@@ -41,7 +37,10 @@ function log(msg: string) {
 
 function waitForOutput(proc: ChildProcess, pattern: string, timeoutMs = 90_000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timeout waiting for "${pattern}"`)), timeoutMs);
+    const timer = setTimeout(
+      () => reject(new Error(`Timeout waiting for "${pattern}"`)),
+      timeoutMs,
+    );
     const onStdout = (chunk: Buffer) => {
       const text = chunk.toString();
       process.stdout.write(text);

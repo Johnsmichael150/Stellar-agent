@@ -3,7 +3,20 @@ import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import { z, ZodError } from "zod";
-import { Keypair, rpc, Account, TransactionBuilder, BASE_FEE, Address, nativeToScVal, Contract, xdr, scValToNative, StrKey, Networks } from "@stellar/stellar-sdk";
+import {
+  Keypair,
+  rpc,
+  Account,
+  TransactionBuilder,
+  BASE_FEE,
+  Address,
+  nativeToScVal,
+  Contract,
+  xdr,
+  scValToNative,
+  StrKey,
+  Networks,
+} from "@stellar/stellar-sdk";
 import { cfg, buyerKeypair, sellerKeypair, getKeypair, DEMO_MODE } from "./lib/config.js";
 import {
   getAllAgents,
@@ -70,19 +83,24 @@ const stellarAddressSchema = z
   .refine(isStellarAddress, { message: "Invalid Stellar public key" });
 
 const numericIdParamSchema = z.object({
-  id: z.string().regex(/^[0-9]+$/, "Job ID must be a positive integer").transform(BigInt),
+  id: z
+    .string()
+    .regex(/^[0-9]+$/, "Job ID must be a positive integer")
+    .transform(BigInt),
 });
 
-const registerAgentSchema = z.object({
-  wallet: z.enum(["buyer", "seller", "freighter"]),
-  publicKey: stellarAddressSchema.optional(),
-  uri: z.string().min(1).optional(),
-}).refine(data => {
-  if (data.wallet === "freighter" && !data.publicKey) {
-    throw new Error("publicKey is required when wallet is freighter");
-  }
-  return true;
-});
+const registerAgentSchema = z
+  .object({
+    wallet: z.enum(["buyer", "seller", "freighter"]),
+    publicKey: stellarAddressSchema.optional(),
+    uri: z.string().min(1).optional(),
+  })
+  .refine((data) => {
+    if (data.wallet === "freighter" && !data.publicKey) {
+      throw new Error("publicKey is required when wallet is freighter");
+    }
+    return true;
+  });
 
 const createJobSchema = z.object({
   wallet: stellarAddressSchema,
@@ -252,7 +270,10 @@ function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction)
   // In production or for unknown wallets, require auth
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) {
-    res.status(401).json({ error: "Authentication required. Use /api/auth/challenge and /api/auth/verify to authenticate." });
+    res.status(401).json({
+      error:
+        "Authentication required. Use /api/auth/challenge and /api/auth/verify to authenticate.",
+    });
     return;
   }
 
@@ -273,7 +294,8 @@ function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === "bigint") return obj.toString();
   if (obj instanceof Date) return obj.toISOString();
-  if (obj instanceof Map) return Array.from(obj.entries()).map(([k, v]) => [serialize(k), serialize(v)]);
+  if (obj instanceof Map)
+    return Array.from(obj.entries()).map(([k, v]) => [serialize(k), serialize(v)]);
   if (obj instanceof Set) return Array.from(obj).map(serialize);
   if (Array.isArray(obj)) return obj.map(serialize);
   if (typeof obj === "object") {
@@ -302,7 +324,9 @@ async function getXlmBalance(pubkey: string): Promise<string> {
   try {
     const resp = await fetch(`${HORIZON_URL}/accounts/${pubkey}`);
     if (!resp.ok) return "0";
-    const data = await resp.json() as { balances: Array<{ asset_type: string; balance: string }> };
+    const data = (await resp.json()) as {
+      balances: Array<{ asset_type: string; balance: string }>;
+    };
     const native = data.balances.find((b: { asset_type: string }) => b.asset_type === "native");
     return native?.balance ?? "0";
   } catch {
@@ -392,14 +416,8 @@ app.get("/api/demo-mode", (_req, res) => {
 // GET /api/stats
 app.get("/api/stats", async (_req, res) => {
   try {
-    const [agents, jobs, feeBps] = await Promise.all([
-      getAllAgents(),
-      getAllJobs(),
-      getFeeBps(),
-    ]);
-    const activeJobs = jobs.filter(
-      (j) => j.status === "Funded" || j.status === "Submitted",
-    ).length;
+    const [agents, jobs, feeBps] = await Promise.all([getAllAgents(), getAllJobs(), getFeeBps()]);
+    const activeJobs = jobs.filter((j) => j.status === "Funded" || j.status === "Submitted").length;
     res.json({
       totalAgents: agents.length,
       totalJobs: jobs.length,
@@ -807,7 +825,7 @@ function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFun
     return res.status(400).json({ error: "Malformed JSON payload" });
   }
   if (err instanceof ZodError) {
-      return res.status(400).json({ error: "Invalid request payload", details: err.issues });
+    return res.status(400).json({ error: "Invalid request payload", details: err.issues });
   }
   console.error("Unhandled server error:", err);
   res.status(500).json({ error: "Internal server error" });

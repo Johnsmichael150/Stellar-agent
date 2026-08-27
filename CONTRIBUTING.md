@@ -61,7 +61,7 @@ Narrow scope to a specific component:
 Provide context and rationale:
 
 - Wrap at 72 characters
-- Explain *why*, not *what* (code explains what)
+- Explain _why_, not _what_ (code explains what)
 - Reference issues: `Resolves #123` or `Fixes #456`
 - Call out breaking changes with a `BREAKING CHANGE:` prefix
 
@@ -112,7 +112,7 @@ Quality over speed. Every feature and fix follows this cycle:
 
 ### 1. Write the Test First
 
-Before touching production code, write a test that *fails*:
+Before touching production code, write a test that _fails_:
 
 ```rust
 #[test]
@@ -120,10 +120,10 @@ fn test_register_new_agent_increments_id() {
     let env = Env::default();
     let contract_id = env.register_contract(None, AgentIdentityContract);
     let client = AgentIdentityContractClient::new(&env, &contract_id);
-    
+
     let alice = Address::generate(&env);
     let metadata_uri = "https://ipfs.example/agent1.json";
-    
+
     // This test should fail until register() is implemented
     let id1 = client.register(&alice, metadata_uri);
     assert_eq!(id1, 1);

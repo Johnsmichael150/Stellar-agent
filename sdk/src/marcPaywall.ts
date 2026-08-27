@@ -130,14 +130,18 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
             // to avoid leaking internal details like facilitator URLs
             if (!res.headersSent) {
               res.status(402).setHeader("Content-Type", "application/json");
-              res.setHeader("Access-Control-Expose-Headers", "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS");
+              res.setHeader(
+                "Access-Control-Expose-Headers",
+                "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
+              );
               res.setHeader("PAYMENT-REQUIRED", JSON.stringify(routeConfig["*"]));
               return res.end(JSON.stringify({ error: "Payment required" }));
             }
             return next(paywallErr);
           }
 
-          const paymentResp = res.getHeader("PAYMENT-RESPONSE") ?? res.getHeader("payment-response");
+          const paymentResp =
+            res.getHeader("PAYMENT-RESPONSE") ?? res.getHeader("payment-response");
           if (paymentResp && !res.getHeader("X-PAYMENT-RESPONSE")) {
             res.setHeader("X-PAYMENT-RESPONSE", paymentResp as string);
           }
@@ -147,7 +151,10 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
         // Catch synchronous errors from paymentMiddleware (e.g., header parsing errors)
         if (!res.headersSent) {
           res.status(402).setHeader("Content-Type", "application/json");
-          res.setHeader("Access-Control-Expose-Headers", "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS");
+          res.setHeader(
+            "Access-Control-Expose-Headers",
+            "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
+          );
           res.setHeader("PAYMENT-REQUIRED", JSON.stringify(routeConfig["*"]));
           return res.end(JSON.stringify({ error: "Payment required" }));
         }

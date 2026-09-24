@@ -7,7 +7,9 @@
     "sdk",
     "dashboard",
     "demo",
-    "agents"
+    "landing",
+    "agents",
+    "agents/*"
   ],
   "scripts": {
     "format": "prettier --write .",

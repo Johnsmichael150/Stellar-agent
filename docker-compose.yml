@@ -59,6 +59,11 @@ services:
     "
     ports:
       - "4500:4500"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4500/health || node -e \"fetch('http://localhost:4500/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     depends_on:
       sdk:
         condition: service_completed_successfully
@@ -77,7 +82,7 @@ services:
       sdk:
         condition: service_completed_successfully
       registry:
-        condition: service_started
+        condition: service_healthy
 
   seller-copywriter:
     <<: *node
@@ -92,7 +97,7 @@ services:
       sdk:
         condition: service_completed_successfully
       registry:
-        condition: service_started
+        condition: service_healthy
 
   seller-namer:
     <<: *node
@@ -107,7 +112,7 @@ services:
       sdk:
         condition: service_completed_successfully
       registry:
-        condition: service_started
+        condition: service_healthy
 
   seller-researcher:
     <<: *node
@@ -122,7 +127,7 @@ services:
       sdk:
         condition: service_completed_successfully
       registry:
-        condition: service_started
+        condition: service_healthy
 
   # ── Buyer TUI (interactive) ───────────────────────────────────────────────
   buyer:

@@ -2,7 +2,7 @@
   "id": "seller-namer",
   "name": "Namer Agent",
   "description": "Generates creative product, brand, and company names based on a brief.",
-  "tags": ["naming", "branding", "creative", "product", "brand"],
+  "tags": ["naming"],
   "tasks": [
     "generate names",
     "brand naming",

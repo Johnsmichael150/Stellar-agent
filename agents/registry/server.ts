@@ -2,6 +2,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { APPROVED_TAGS } from "../shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = path.join(__dirname, "..");
@@ -27,6 +28,24 @@ const activeAgents = new Map<string, AgentEntry>();
 // JSON schema for agent manifests — closes #66
 const REQUIRED_STRING_FIELDS = ["id", "name", "description", "url"] as const;
 
+/**
+ * Validates manifest capability tags against the approved taxonomy list (Issue #597).
+ * Standardizing tags helps buyer agents reliably discover suitable sellers.
+ * Logs a warning when unknown tags are encountered and returns an error message.
+ */
+export function validateTags(tags: string[]): string | null {
+  const invalid = tags
+    .map((t) => t.toLowerCase().trim())
+    .filter((t) => !(APPROVED_TAGS as readonly string[]).includes(t));
+
+  if (invalid.length > 0) {
+    const msg = `unknown capability tag(s): [${invalid.join(", ")}]. Must match approved taxonomy: [${APPROVED_TAGS.join(", ")}]`;
+    console.warn(`[registry] Tag validation warning: ${msg}`);
+    return msg;
+  }
+  return null;
+}
+
 function validateManifest(m: unknown): string | null {
   if (typeof m !== "object" || m === null || Array.isArray(m))
     return "manifest must be a JSON object";
@@ -44,10 +63,14 @@ function validateManifest(m: unknown): string | null {
     return 'field "wallet" must be a non-empty string';
   if (!/^G[A-Z2-7]{55}$/.test(obj.wallet as string))
     return 'field "wallet" must be a valid Stellar public key (starts with G, 56 chars)';
-  // `tags` is optional but must be an array of strings when present
+  // `tags` is optional but must be an array of strings conforming to taxonomy
   if (obj.tags !== undefined) {
     if (!Array.isArray(obj.tags) || obj.tags.some((t) => typeof t !== "string")) {
       return 'field "tags" must be an array of strings';
+    }
+    const tagError = validateTags(obj.tags as string[]);
+    if (tagError) {
+      return tagError;
     }
   }
   return null;

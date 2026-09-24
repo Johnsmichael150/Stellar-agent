@@ -10,6 +10,23 @@ export interface StandardSellerResponse<T = unknown> {
   execution_time_ms: number;
 }
 
+/**
+ * Standard capability tag taxonomy approved for agent manifests (Issue #597).
+ * Standardizing tags allows buyer agents to reliably discover sellers by capability.
+ */
+export const APPROVED_TAGS = [
+  "webdev",
+  "copywriting",
+  "research",
+  "naming",
+  "translation",
+  "data-analysis",
+  "seo",
+  "design",
+] as const;
+
+export type ApprovedTag = (typeof APPROVED_TAGS)[number];
+
 export function validateEnv(requiredKeys: string[]): void {
   const aliases: Record<string, string[]> = {
     PORT: ["PORT", "SELLER_PORT"],

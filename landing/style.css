@@ -520,6 +520,87 @@ button {
   max-width: 640px;
 }
 
+/* ── Live Protocol Stats (Issue #599) ── */
+.stats-section {
+  padding: 80px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.stats-header {
+  margin-bottom: 40px;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s,
+              box-shadow 0.25s;
+}
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+.stat-card-inner {
+  display: flex;
+  flex-direction: column;
+}
+.stat-number {
+  font-size: clamp(32px, 3.5vw, 48px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1.1;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  min-height: 52px;
+}
+.stat-number.loading {
+  opacity: 0.5;
+  animation: pulse-stat 1.5s ease-in-out infinite;
+}
+@keyframes pulse-stat {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+.stat-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.stat-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+}
+@media (max-width: 800px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
 /* ── Protocol Stack Cards ── */
 .stack-grid {
   display: grid;

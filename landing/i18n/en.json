@@ -1,5 +1,6 @@
 {
   "nav": {
+    "stats": "Stats",
     "protocol": "Protocol",
     "how_it_works": "How It Works",
     "guide": "Getting Started",
@@ -19,6 +20,18 @@
   "statement": {
     "title": "Bear is a complete commerce infrastructure stack combining x402 micropayments, agent identity, and job escrow into one unified protocol.",
     "sub": "Built on three standards (ERC-8004, ERC-8183, x402), Bear provides everything an AI agent needs to transact trustlessly on Stellar. Register, escrow, deliver, settle."
+  },
+  "stats": {
+    "eyebrow": "Live Metrics",
+    "title_line1": "Protocol",
+    "title_accent": "Traction",
+    "desc": "Real-time on-chain statistics from Soroban testnet contracts.",
+    "registered_agents": "Total Registered Agents",
+    "agents_sub": "identity.registered_count()",
+    "escrow_jobs": "Total Escrow Jobs",
+    "jobs_sub": "commerce.job_count()",
+    "fee_revenue": "Fee Revenue",
+    "revenue_sub": "Formatted USDC Volume"
   },
   "protocol": {
     "eyebrow": "Protocol",

@@ -19,6 +19,7 @@ import {
 } from "marc-stellar-sdk";
 import { retryWithBackoff } from "../shared.js";
 import { watchFile, unwatchFile, readFileSync, existsSync } from "node:fs";
+import { createServer } from "node:http";
 
 const DEFAULT_JOB_BUDGET = 10_000_000n;
 
@@ -300,6 +301,196 @@ agentsBox.key(["down"], () => {
   selectedIndex = Math.min(agents.length - 1, selectedIndex + 1);
   renderAgents();
 });
-agentsBox.key(["enter", "tab"
+agentsBox.key(["enter", "tab"], () => {
+  taskBox.focus();
+});
+screen.key(["enter"], async () => {
+  const task = taskBox.getValue().trim();
+  if (!task || agents.length === 0) return;
+  await submitTask(task);
+});
 
-/* … truncated 5359 chars — edit only what you need near the top … */
+taskBox.key(["enter"], async () => {
+  const task = taskBox.getValue().trim();
+  if (!task) return;
+  await submitTask(task);
+});
+
+// ── Health Check Server ───────────────────────────────────────────────────────
+
+const BUYER_HEALTH_PORT = parseInt(process.env.BUYER_HEALTH_PORT || "4550", 10);
+let activePolls = 0;
+
+const healthServer = createServer((req, res) => {
+  const urlPath = req.url?.split("?")[0];
+  if (req.method === "GET" && (urlPath === "/health" || urlPath === "/health/")) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        uptime: process.uptime(),
+        activePolls,
+      }),
+    );
+  } else {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not Found" }));
+  }
+});
+
+healthServer.listen(BUYER_HEALTH_PORT, () => {
+  // Bound to port silently to avoid disturbing the blessed TUI display
+});
+
+process.on("SIGINT", () => {
+  healthServer.close();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  healthServer.close();
+  process.exit(0);
+});
+
+// ── Deliverable validation ────────────────────────────────────────────────────
+
+function validateDeliverable(job: Job): { valid: boolean; reason?: string } {
+  if (!job.deliverable || typeof job.deliverable !== "string") {
+    return { valid: false, reason: "deliverable is empty or not a string" };
+  }
+  const s = job.deliverable.trim();
+  if (s.length === 0) {
+    return { valid: false, reason: "deliverable is whitespace-only" };
+  }
+  const scheme = s.split("://")[0];
+  if (!scheme || !/^[a-z][a-z0-9+.-]*$/i.test(scheme)) {
+    return { valid: false, reason: `deliverable is not a valid URI: "${s.slice(0, 80)}"` };
+  }
+  if (job.status !== "Submitted") {
+    return { valid: false, reason: `expected status Submitted, got ${job.status}` };
+  }
+  return { valid: true };
+}
+
+// ── Submit task ───────────────────────────────────────────────────────────────
+
+async function submitTask(task: string, overrides?: { budget?: bigint; provider?: string }) {
+  const targetProvider = overrides?.provider ?? agents[selectedIndex]?.id;
+  const picked =
+    agents.find((agent) => agent.id === targetProvider || agent.name === targetProvider) ??
+    agents[selectedIndex];
+  const budget = overrides?.budget ?? DEFAULT_JOB_BUDGET;
+  taskBox.hide();
+  logBox.show();
+  sellerLogBox.show();
+  sellerLogBox.setLabel(` ${picked.name} Activity `);
+
+  // Tail seller log file (closes any previous watcher first)
+  watchSellerLog(picked);
+
+  screen.render();
+
+  log(`{cyan-fg}Hiring {bold}${picked.name}{/bold}:{/cyan-fg}`);
+  log(`  "${task}"`);
+
+  try {
+    const identity = new IdentityClient(cfg);
+    let agentId = await identity.agentOf(buyer.publicKey());
+    if (!agentId) {
+      agentId = await identity.register(buyer, "ipfs://buyer-agent.json");
+      log(`Registered on-chain as agent #${agentId}`);
+    } else {
+      log(`Buyer is agent #${agentId} on-chain`);
+    }
+
+    log(`Creating escrow job on MARC...`);
+    const commerce = new CommerceClient(cfg);
+    const jobId = await commerce.createJob(
+      buyer,
+      picked.wallet,
+      buyer.publicKey(),
+      cfg.usdcToken,
+      budget,
+      task,
+    );
+    log(
+      `{green-fg}Job #${jobId} created — ${Number(budget / 10_000_000n)} USDC locked in escrow{/green-fg}`,
+    );
+
+    // Notify seller server with retry on 5xx
+    log(`Sending job to ${picked.name} at ${picked.url}...`);
+    await retryWithBackoff(
+      async () => {
+        const r = await fetch(`${picked.url}/job`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId: jobId.toString(), task }),
+        });
+        if (r.status >= 500) throw new Error(`Seller returned ${r.status}`);
+      },
+      { maxAttempts: 3, baseDelayMs: 1000, label: picked.name },
+    );
+    log(`{cyan-fg}${picked.name} accepted the job — working...{/cyan-fg}`);
+    log(`Waiting for deliverable...`);
+
+    // Poll for submission with retry on timeout, bounded so a crashed seller can't hang the buyer forever
+    let job: Job | null = null;
+    let pollAttempts = 0;
+    activePolls++;
+    try {
+      while (pollAttempts < MAX_POLL_ATTEMPTS) {
+        try {
+          job = await commerce.getJob(jobId);
+          if (job?.status === "Submitted") {
+            log(`{green-fg}Deliverable received: ${job.deliverable}{/green-fg}`);
+            break;
+          }
+        } catch {}
+        pollAttempts++;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    } finally {
+      activePolls--;
+    }
+
+    if (!job || job.status !== "Submitted") {
+      const minutes = Math.round((MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 60_000);
+      log(
+        `{red-fg}Timed out after ${minutes} min waiting for ${picked.name} — cancelling job #${jobId}{/red-fg}`,
+      );
+      await commerce.cancel(buyer, jobId);
+      return;
+    }
+
+    // Validate deliverable before paying
+    const validation = validateDeliverable(job!);
+    if (!validation.valid) {
+      log(`{red-fg}Deliverable validation failed: ${validation.reason}{/red-fg}`);
+      log(`{red-fg}Cancelling job #${jobId} — no payment issued{/red-fg}`);
+      await commerce.cancel(buyer, jobId);
+      return;
+    }
+
+    await commerce.complete(buyer, jobId);
+    log(`{green-fg}{bold}✓ Job #${jobId} complete — 99% paid to ${picked.name}{/bold}{/green-fg}`);
+    log(`{gray-fg}Press 'n' to start a new task{/gray-fg}`);
+    await refreshBalances();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : JSON.stringify(err);
+    log(`{red-fg}Error: ${msg.split("\n")[0] || JSON.stringify(err)}{/red-fg}`);
+    log(
+      `{gray-fg}Seller wallet: ${picked.wallet ?? "NOT SET — re-run wallet populate script"}{/gray-fg}`,
+    );
+  }
+}
+
+agentsBox.focus();
+screen.render();
+refreshBalances();
+await loadAgents();
+if (cliArgs.description) {
+  const provider = cliArgs.provider ? cliArgs.provider : agents[0]?.id;
+  if (provider)
+    selectedIndex = agents.findIndex((agent) => agent.id === provider || agent.name === provider);
+  if (selectedIndex < 0) selectedIndex = 0;
+  await submitTask(cliArgs.description, { budget: cliArgs.budget, provider });
+}

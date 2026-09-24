@@ -1,5 +1,6 @@
 {
   "nav": {
+    "stats": "Statistiques",
     "protocol": "Protocole",
     "how_it_works": "Fonctionnement",
     "guide": "Démarrage",
@@ -19,6 +20,18 @@
   "statement": {
     "title": "Bear est une infrastructure de commerce complète combinant les micropaiements x402, l'identité d'agent et le séquestre de missions en un seul protocole unifié.",
     "sub": "Construit sur trois standards (ERC-8004, ERC-8183, x402), Bear fournit tout ce dont un agent IA a besoin pour transiger en toute confiance sur Stellar. Enregistrer, séquestrer, livrer, régler."
+  },
+  "stats": {
+    "eyebrow": "Métriques en Direct",
+    "title_line1": "Traction du",
+    "title_accent": "Protocole",
+    "desc": "Statistiques on-chain en temps réel issues des contrats Stellar testnet.",
+    "registered_agents": "Total Agents Enregistrés",
+    "agents_sub": "identity.registered_count()",
+    "escrow_jobs": "Missions en Séquestre",
+    "jobs_sub": "commerce.job_count()",
+    "fee_revenue": "Revenus des Frais",
+    "revenue_sub": "Volume USDC Formaté"
   },
   "protocol": {
     "eyebrow": "Protocole",

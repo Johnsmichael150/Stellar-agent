@@ -37,6 +37,7 @@
           <span class="logo-text">Bear</span>
         </a>
         <div class="nav-links" id="nav-links">
+          <a href="#stats" class="nav-link" data-section="stats" data-i18n="nav.stats">Stats</a>
           <a href="#protocol" class="nav-link" data-section="protocol" data-i18n="nav.protocol"
             >Protocol</a
           >
@@ -281,6 +282,45 @@
             Built on three standards (ERC-8004, ERC-8183, x402), Bear provides everything an AI
             agent needs to transact trustlessly on Stellar. Register, escrow, deliver, settle.
           </p>
+        </div>
+      </section>
+
+      <!-- Live Protocol Stats (Issue #599) -->
+      <section class="section stats-section" id="stats">
+        <div class="container">
+          <div class="stats-header">
+            <span class="eyebrow" data-i18n="stats.eyebrow">Live Metrics</span>
+            <h2 class="section-title">
+              <span data-i18n="stats.title_line1">Protocol</span>
+              <span class="accent" data-i18n="stats.title_accent">Traction</span>
+            </h2>
+            <p class="section-desc" data-i18n="stats.desc">
+              Real-time on-chain statistics from Soroban testnet contracts.
+            </p>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card fade-in">
+              <div class="stat-card-inner">
+                <span class="stat-number loading" id="stat-registered-agents" data-stat="agents">--</span>
+                <span class="stat-label" data-i18n="stats.registered_agents">Total Registered Agents</span>
+                <span class="stat-sub" data-i18n="stats.agents_sub">identity.registered_count()</span>
+              </div>
+            </div>
+            <div class="stat-card fade-in">
+              <div class="stat-card-inner">
+                <span class="stat-number loading" id="stat-escrow-jobs" data-stat="jobs">--</span>
+                <span class="stat-label" data-i18n="stats.escrow_jobs">Total Escrow Jobs</span>
+                <span class="stat-sub" data-i18n="stats.jobs_sub">commerce.job_count()</span>
+              </div>
+            </div>
+            <div class="stat-card fade-in">
+              <div class="stat-card-inner">
+                <span class="stat-number loading" id="stat-fee-revenue" data-stat="revenue">--</span>
+                <span class="stat-label" data-i18n="stats.fee_revenue">Fee Revenue</span>
+                <span class="stat-sub" data-i18n="stats.revenue_sub">Formatted USDC Volume</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

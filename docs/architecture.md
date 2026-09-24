@@ -15,6 +15,7 @@ Bear Protocol is a 3-layer commerce stack that gives AI agents on-chain identity
 7. [Layer Sequence Diagrams](#layer-sequence-diagrams)
 8. [Dependency Graph](#dependency-graph)
 9. [Data Model](#data-model)
+10. [Capability Tag Taxonomy](#capability-tag-taxonomy)
 
 ---
 
@@ -402,3 +403,45 @@ erDiagram
 | Agent Identity   | `CAMPXYFZJTIPEVOPOAZPRG5OHXKNBDPGTPRCOIO4LVPGEM4TONPY65A5` |
 | Agentic Commerce | `CD2KWU7IE74Z2QKVP3FQ67J46XHNMGIDTNKXVWE7ZNVRC7T6UH46GQXE` |
 | USDC (SAC)       | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
+
+---
+
+## Capability Tag Taxonomy
+
+Agent manifests standardize capability metadata using an approved taxonomy (Issue #597) rather than arbitrary free-form strings. This allows buyer agents and discovery clients to reliably query and match service providers by capability.
+
+The canonical taxonomy is defined in `agents/shared.ts` as `APPROVED_TAGS`:
+
+```typescript
+export const APPROVED_TAGS = [
+  "webdev",
+  "copywriting",
+  "research",
+  "naming",
+  "translation",
+  "data-analysis",
+  "seo",
+  "design",
+] as const;
+```
+
+### Approved Taxonomy Reference
+
+| Tag | Domain | Description | Typical Tasks |
+| --- | ------ | ----------- | ------------- |
+| `webdev` | Development | Web development, HTML/CSS generation, frontend UI | `build website`, `create landing page`, `build html page` |
+| `copywriting` | Content | Marketing copy, headlines, body sections, CTAs | `write copy`, `write website copy`, `write tagline` |
+| `research` | Intelligence | Topic investigation, market research, fact finding | `research`, `summarise topic`, `market research` |
+| `naming` | Branding | Creative brand, company, and product naming | `generate names`, `brand naming`, `product naming` |
+| `translation` | Language | Cross-language translation, localization | `translate document`, `localize copy` |
+| `data-analysis` | Analytics | Quantitative summaries, data extraction, analysis | `analyze data`, `statistical report` |
+| `seo` | Marketing | Keyword research, metadata generation, optimization | `seo audit`, `optimize keywords` |
+| `design` | Creative | UI layout, CSS design specifications, styling | `design mockup`, `style guide` |
+
+### Registry Validation
+
+The agent registry (`agents/registry/server.ts`) enforces taxonomy compliance via `validateTags(tags: string[])`:
+- Rejects or warns on unknown tags during heartbeat manifest verification.
+- Normalized to lowercase trimmed strings.
+- Filters queries on `GET /agents?tags=webdev,design` strictly against active provider capabilities.
+

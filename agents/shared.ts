@@ -35,12 +35,17 @@ export function validateEnv(requiredKeys: string[]): void {
     GROQ_API_KEY: ["GROQ_API_KEY"],
   };
 
-  const missing = requiredKeys
-    .flatMap((key) => aliases[key] ?? [key])
-    .filter((envKey) => {
-      const value = process.env[envKey];
-      return typeof value !== "string" || value.trim() === "";
+  const missing: string[] = [];
+  for (const key of requiredKeys) {
+    const candidates = aliases[key] ?? [key];
+    const isPresent = candidates.some((candidateKey) => {
+      const value = process.env[candidateKey];
+      return typeof value === "string" && value.trim() !== "";
     });
+    if (!isPresent) {
+      missing.push(key);
+    }
+  }
 
   const uniqueMissing = [...new Set(missing)];
   if (uniqueMissing.length > 0) {

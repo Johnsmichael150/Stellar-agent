@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx --watch server.ts",
-    "start": "tsx server.ts"
+    "start": "tsx server.ts",
+    "deregister": "tsx ../deregister.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

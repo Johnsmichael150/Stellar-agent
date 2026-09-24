@@ -14,6 +14,7 @@ import type { Agent, MarcConfig } from "./types.js";
 import { BaseClient } from "./baseClient.js";
 import type { Signer } from "./signer.js";
 import { signerPublicKey } from "./signer.js";
+import { isValidMetadataUri } from "./format.js";
 
 /**
  * Typed client for the `agent_identity` Soroban contract.
@@ -59,10 +60,12 @@ export class IdentityClient extends BaseClient {
    * @param owner - The owner's Keypair. Used as both the on-chain `owner`
    *                address and the transaction signer.
    * @param uri - Metadata URI for the agent (e.g. a DID document URL or IPFS CID).
+   *              Must be `https://` or `ipfs://`; see {@link isValidMetadataUri}.
    * @returns The assigned on-chain agent ID as a `bigint`, decoded directly
    *          from the contract's `register()` return value.
-   * @throws {Error} If the account has insufficient funds, the RPC call fails,
-   *                 or the transaction is rejected by the network.
+   * @throws {Error} If `uri` fails {@link isValidMetadataUri}, the account has
+   *                 insufficient funds, the RPC call fails, or the transaction
+   *                 is rejected by the network.
    *
    * @example
    * ```typescript
@@ -71,6 +74,9 @@ export class IdentityClient extends BaseClient {
    * ```
    */
   async register(owner: Keypair, uri: string): Promise<bigint> {
+    if (!isValidMetadataUri(uri)) {
+      throw new Error(`invalid metadata uri: ${uri}`);
+    }
     const op = this.contract.call(
       "register",
       new Address(signerPublicKey(owner)).toScVal(),
@@ -152,8 +158,15 @@ export class IdentityClient extends BaseClient {
     return this.getAgent(id);
   }
 
-  /** Update an agent's metadata URI (owner-only). */
+  /**
+   * Update an agent's metadata URI (owner-only).
+   *
+   * @throws {Error} If `uri` fails {@link isValidMetadataUri}.
+   */
   async updateUri(owner: Signer, id: bigint, uri: string): Promise<void> {
+    if (!isValidMetadataUri(uri)) {
+      throw new Error(`invalid metadata uri: ${uri}`);
+    }
     const op = this.contract.call(
       "update_uri",
       new Address(signerPublicKey(owner)).toScVal(),

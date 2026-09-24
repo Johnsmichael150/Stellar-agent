@@ -52,3 +52,51 @@ export function formatAmount(
 
   return fracStr.length > 0 ? `${sign}${wholeStr}.${fracStr}` : `${sign}${wholeStr}`;
 }
+
+/**
+ * Validate an agent metadata URI to prevent SSRF and script-injection when
+ * clients later fetch it.
+ *
+ * Only `https://` and `ipfs://` schemes are accepted (`ipfs://` is
+ * content-addressed and has no network host to resolve, so it skips the IP
+ * checks below). Everything else — including `javascript:`, `data:`, and
+ * `file:` — is rejected.
+ *
+ * For `https://` URIs, the hostname is also rejected if it is a loopback or
+ * private IPv4 literal: `127.0.0.0/8`, `10.0.0.0/8`, or `169.254.0.0/16`
+ * (the latter covers cloud metadata endpoints such as `169.254.169.254`).
+ *
+ * @example
+ * isValidMetadataUri("https://ipfs.example/metadata.json") // true
+ * isValidMetadataUri("ipfs://Qm...")                        // true
+ * isValidMetadataUri("javascript:alert(1)")                 // false
+ * isValidMetadataUri("http://169.254.169.254/latest/meta-data/") // false
+ */
+export function isValidMetadataUri(uri: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol === "ipfs:") {
+    return true;
+  }
+
+  if (parsed.protocol !== "https:") {
+    return false;
+  }
+
+  const ipv4 = parsed.hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const octets = ipv4.slice(1).map(Number);
+    if (octets.some((o) => o > 255)) return false;
+    const [a, b] = octets;
+    if (a === 127) return false; // 127.0.0.0/8 (loopback)
+    if (a === 10) return false; // 10.0.0.0/8 (private)
+    if (a === 169 && b === 254) return false; // 169.254.0.0/16 (link-local / cloud metadata)
+  }
+
+  return true;
+}

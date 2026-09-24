@@ -63,6 +63,21 @@ that any new entry points added post-audit follow the same pattern. Pay particul
 - **OpenZeppelin** — Security audits and contract review; strong Rust/soroban-sdk familiarity.
 - **Kudelski Security** — Blockchain smart contract audits; prior Soroban ecosystem work.
 
+### Automated Static Analysis (CodeQL)
+
+`.github/workflows/codeql.yml` runs GitHub CodeQL against the `javascript-typescript`
+codebase (SDK, agents, dashboard) on every push to `main` and on a weekly schedule
+(Sundays at 00:00 UTC). This catches common CWE classes — injection, unsafe deserialization,
+SSRF, and similar — before they reach mainnet.
+
+Findings appear in the repository's **Security → Code scanning alerts** tab. Treat any
+alert touching a payment or agent-registration code path as a mainnet blocker until
+triaged and resolved or explicitly dismissed with a rationale.
+
+CodeQL does not cover the Rust contracts (`contracts/agent-identity`,
+`contracts/agentic-commerce`) — those rely on `cargo clippy` (see CI) and the manual
+audit scope above.
+
 ---
 
 ## Infrastructure

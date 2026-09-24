@@ -95,6 +95,8 @@ const BPS_DENOM: i128 = 10_000;
 const REFUND_TIMEOUT_SECS: u64 = 7 * 24 * 3600; // 7 days
 /// #25 — minimum budget to prevent zero/dust jobs that waste storage and spam events.
 const MIN_BUDGET: i128 = 1;
+/// #619 — maximum deliverable URI length to prevent storage griefing.
+const MAX_DELIVERABLE_LEN: u32 = 1024;
 
 // --- Events ---
 
@@ -445,6 +447,10 @@ impl AgenticCommerceContract {
             .all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'));
         if is_blank {
             panic!("deliverable cannot be empty");
+        }
+        // #619 — cap deliverable length to prevent storage griefing.
+        if deliverable.len() > MAX_DELIVERABLE_LEN {
+            panic!("deliverable too long");
         }
         job.status = JobStatus::Submitted;
         job.deliverable = deliverable;

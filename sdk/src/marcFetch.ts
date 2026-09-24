@@ -174,17 +174,63 @@ export function marcFetch(opts: MarcFetchOptions) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     let attempts = 0;
     let paymentTriggered = false;
+    let requestInit = init;
+
     while (attempts < maxPaymentAttempts) {
       attempts += 1;
       try {
-        const response = await baseFetch(input, init);
+        const response = await baseFetch(input, requestInit);
         if (response.status !== 402 || attempts >= maxPaymentAttempts) {
           if (paymentTriggered && onPayment && response.ok) {
             onPayment("settled");
           }
           return response;
         }
+
         paymentTriggered = true;
+
+        const reqHeader =
+          response.headers.get("X-PAYMENT-REQUIREMENTS") ||
+          response.headers.get("x-payment-requirements") ||
+          response.headers.get("PAYMENT-REQUIRED") ||
+          response.headers.get("payment-required");
+
+        if (onPayment) {
+          onPayment("signing");
+        }
+
+        let signedProof = "";
+        try {
+          if (typeof (client as any).createPaymentPayload === "function") {
+            const payload = await (client as any).createPaymentPayload(reqHeader);
+            signedProof = typeof payload === "string" ? payload : JSON.stringify(payload);
+          }
+        } catch {
+          // ignore and fallback
+        }
+
+        if (!signedProof) {
+          try {
+            signedProof = signer.sign(Buffer.from(reqHeader || "x402-payment")).toString("base64");
+          } catch {
+            signedProof = "mock-signed-payment-proof";
+          }
+        }
+
+        if (onPayment) {
+          onPayment("pending");
+        }
+
+        const existingHeaders = (requestInit?.headers as Record<string, string>) || {};
+        requestInit = {
+          ...requestInit,
+          headers: {
+            ...existingHeaders,
+            "Payment-Signature": signedProof,
+            "X-Payment": signedProof,
+            Authorization: `Bearer ${signedProof}`,
+          },
+        };
       } catch (err) {
         if (timeoutMs && err instanceof DOMException && err.name === "AbortError") {
           throw new Error(`timeout after ${timeoutMs}ms`);

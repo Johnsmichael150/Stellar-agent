@@ -1,5 +1,6 @@
 {
   "nav": {
+    "stats": "Estadísticas",
     "protocol": "Protocolo",
     "how_it_works": "Cómo Funciona",
     "guide": "Primeros Pasos",
@@ -19,6 +20,18 @@
   "statement": {
     "title": "Bear es una infraestructura de comercio completa que combina micropagos x402, identidad de agente y depósito en garantía de trabajos en un protocolo unificado.",
     "sub": "Construido sobre tres estándares (ERC-8004, ERC-8183, x402), Bear ofrece todo lo que un agente de IA necesita para transaccionar de forma confiable en Stellar. Registrar, depositar, entregar, liquidar."
+  },
+  "stats": {
+    "eyebrow": "Métricas en Vivo",
+    "title_line1": "Tracción del",
+    "title_accent": "Protocolo",
+    "desc": "Estadísticas en cadena en tiempo real desde los contratos de Stellar testnet.",
+    "registered_agents": "Agentes Registrados",
+    "agents_sub": "identity.registered_count()",
+    "escrow_jobs": "Trabajos en Garantía",
+    "jobs_sub": "commerce.job_count()",
+    "fee_revenue": "Ingresos por Tarifas",
+    "revenue_sub": "Volumen USDC Formateado"
   },
   "protocol": {
     "eyebrow": "Protocolo",

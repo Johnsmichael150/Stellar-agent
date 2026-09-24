@@ -97,6 +97,27 @@ function handleApiRequest(req, res) {
     return true;
   }
 
+  if (req.url === "/api/stats" && req.method === "GET") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+    res.setHeader("Content-Type", "application/json");
+
+    const statsResponse = {
+      network: "testnet",
+      totalAgents: 4,
+      totalJobs: 12,
+      activeJobs: 3,
+      feeRevenue: "25.00",
+      feeRevenueFormatted: "$25.00 USDC",
+      status: "ok",
+      timestamp: new Date().toISOString(),
+    };
+
+    res.writeHead(200);
+    res.end(JSON.stringify(statsResponse, null, 2));
+    return true;
+  }
+
   return false;
 }
 

@@ -61,10 +61,14 @@ export function validateManifest(m: unknown): string | null {
     return 'field "wallet" must be a non-empty string';
   if (!/^G[A-Z2-7]{55}$/.test(obj.wallet as string))
     return 'field "wallet" must be a valid Stellar public key (starts with G, 56 chars)';
-  // `tags` is optional but must be an array of strings when present
+  // `tags` is optional but must be an array of strings conforming to taxonomy
   if (obj.tags !== undefined) {
     if (!Array.isArray(obj.tags) || obj.tags.some((t) => typeof t !== "string")) {
       return 'field "tags" must be an array of strings';
+    }
+    const tagError = validateTags(obj.tags as string[]);
+    if (tagError) {
+      return tagError;
     }
   }
   return null;

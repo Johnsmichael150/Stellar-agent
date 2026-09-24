@@ -15,7 +15,7 @@ version: "3.9"
 #   sdk           build the marc-stellar-sdk TypeScript package
 #   registry      agent discovery API (port 4500)
 #   seller-*      agent workers (ports 4501-4504)
-#   buyer         interactive Blessed TUI (no port, stdin required)
+#   buyer         interactive Blessed TUI (healthcheck port 4550, stdin required)
 
 x-node: &node
   image: node:22-slim
@@ -132,6 +132,14 @@ services:
       npm install --silent 2>/dev/null &&
       npx tsx index.ts
     "
+    ports:
+      - "4550:4550"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4550/health || node -e \"fetch('http://localhost:4550/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     stdin_open: true
     tty: true
     depends_on:

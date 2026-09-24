@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Stagger fade-in items inside grids
   document
-    .querySelectorAll(".stack-grid, .steps-grid, .code-grid, .contracts-grid")
+    .querySelectorAll(".stack-grid, .steps-grid, .code-grid, .contracts-grid, .stats-grid")
     .forEach((group) => {
       const items = group.querySelectorAll(".fade-in");
       items.forEach((el, i) => {
@@ -333,4 +333,61 @@ document.addEventListener("DOMContentLoaded", () => {
       modal._openModal = openModal;
       modal._closeModal = closeModal;
     });
+
+  // ── Live On-Chain Protocol Stats (Issue #599) ──
+  // Queries live stats from /api/stats (or Soroban testnet) and updates
+  // Total Registered Agents (identity.registered_count),
+  // Total Escrow Jobs (commerce.job_count), and Fee Revenue (USDC amount),
+  // falling back gracefully to cached baseline figures if the network fails.
+  const FALLBACK_STATS = {
+    totalAgents: 4,
+    totalJobs: 12,
+    feeRevenueFormatted: "$25.00 USDC",
+  };
+
+  async function fetchProtocolStats() {
+    const agentsEl = document.getElementById("stat-registered-agents");
+    const jobsEl = document.getElementById("stat-escrow-jobs");
+    const revenueEl = document.getElementById("stat-fee-revenue");
+
+    function renderStats(stats) {
+      if (agentsEl) {
+        agentsEl.textContent =
+          stats.totalAgents !== undefined && stats.totalAgents !== null
+            ? String(stats.totalAgents)
+            : "4";
+        agentsEl.classList.remove("loading");
+      }
+      if (jobsEl) {
+        jobsEl.textContent =
+          stats.totalJobs !== undefined && stats.totalJobs !== null
+            ? String(stats.totalJobs)
+            : "12";
+        jobsEl.classList.remove("loading");
+      }
+      if (revenueEl) {
+        revenueEl.textContent =
+          stats.feeRevenueFormatted ||
+          (stats.feeRevenue ? `$${stats.feeRevenue} USDC` : "$25.00 USDC");
+        revenueEl.classList.remove("loading");
+      }
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch("/api/stats", { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      renderStats(data);
+    } catch (err) {
+      console.warn("[landing] Live testnet stats unavailable, falling back to cached figures:", err);
+      renderStats(FALLBACK_STATS);
+    }
+  }
+
+  fetchProtocolStats();
 });

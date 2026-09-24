@@ -131,6 +131,12 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
           originalSetHeader.call(this, "X-PAYMENT-RESPONSE", value);
         } else if (lower === "x-payment-response" && !res.getHeader("PAYMENT-RESPONSE")) {
           originalSetHeader.call(this, "PAYMENT-RESPONSE", value);
+        } else if (lower === "payment-required" && !res.getHeader("X-PAYMENT-REQUIREMENTS")) {
+          const valStr = typeof value === "string" ? value : JSON.stringify(value);
+          const base64 = Buffer.from(valStr).toString("base64");
+          originalSetHeader.call(this, "X-PAYMENT-REQUIREMENTS", base64);
+        } else if (lower === "x-payment-requirements" && !res.getHeader("PAYMENT-REQUIRED")) {
+          originalSetHeader.call(this, "PAYMENT-REQUIRED", value);
         }
         return originalSetHeader.call(this, name, value);
       };
@@ -144,9 +150,11 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
               res.status(402).setHeader("Content-Type", "application/json");
               res.setHeader(
                 "Access-Control-Expose-Headers",
-                "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
+                "PAYMENT-RESPONSE, X-PAYMENT-RESPONSE, PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
               );
-              res.setHeader("PAYMENT-REQUIRED", JSON.stringify(routeConfig["*"]));
+              const payload = JSON.stringify(routeConfig["*"]);
+              res.setHeader("PAYMENT-REQUIRED", payload);
+              res.setHeader("X-PAYMENT-REQUIREMENTS", Buffer.from(payload).toString("base64"));
               return res.end(JSON.stringify({ error: "Payment required" }));
             }
             return next(paywallErr);
@@ -165,9 +173,11 @@ export function marcPaywall(opts: MarcPaywallOptions): RequestHandler {
           res.status(402).setHeader("Content-Type", "application/json");
           res.setHeader(
             "Access-Control-Expose-Headers",
-            "PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
+            "PAYMENT-RESPONSE, X-PAYMENT-RESPONSE, PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS",
           );
-          res.setHeader("PAYMENT-REQUIRED", JSON.stringify(routeConfig["*"]));
+          const payload = JSON.stringify(routeConfig["*"]);
+          res.setHeader("PAYMENT-REQUIRED", payload);
+          res.setHeader("X-PAYMENT-REQUIREMENTS", Buffer.from(payload).toString("base64"));
           return res.end(JSON.stringify({ error: "Payment required" }));
         }
         next(err);

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import express from "express";
 import { Keypair } from "@stellar/stellar-sdk";
-import { IdentityClient, TESTNET, type MarcConfig } from "marc-stellar-sdk";
+import { IdentityClient, TESTNET, maskSecret, type MarcConfig } from "marc-stellar-sdk";
 
 export interface StandardSellerResponse<T = unknown> {
   success: boolean;
@@ -88,7 +88,7 @@ export async function createSellerAgent(options: {
       { maxAttempts: 6, baseDelayMs: 2000, label: options.id },
     );
   } catch (err) {
-    console.error(`[${options.id}] Fatal: identity RPC unreachable —`, (err as Error).message);
+    console.error(`[${options.id}] Fatal: identity RPC unreachable —`, maskSecret((err as Error).message));
     process.exit(1);
   }
   if (!agentId) {
@@ -115,7 +115,7 @@ export async function createSellerAgent(options: {
   app.use(express.json());
 
   app.use((req, res, next) => {
-    console.log(`[${options.id}] → ${req.method} ${req.path}`, JSON.stringify(req.body));
+    console.log(`[${options.id}] → ${req.method} ${req.path}`, maskSecret(JSON.stringify(req.body)));
     res.on("finish", () => console.log(`[${options.id}] ← ${res.statusCode}`));
     next();
   });
@@ -208,7 +208,7 @@ export async function startHeartbeat(
       console.log(`[${agentId}] Heartbeat established with ${registryUrl}`);
       break;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = maskSecret(err instanceof Error ? err.message : String(err));
       if (attempt === maxAttempts) {
         console.warn(
           `[${agentId}] Heartbeat startup failed after ${maxAttempts} attempts: ${message}`,
@@ -227,7 +227,7 @@ export async function startHeartbeat(
     try {
       await sendHeartbeat();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = maskSecret(err instanceof Error ? err.message : String(err));
       console.warn(`[${agentId}] Heartbeat retry failed: ${message}`);
     }
   }, intervalMs);

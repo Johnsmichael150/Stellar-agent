@@ -2,6 +2,7 @@ import { Keypair, rpc, TransactionBuilder, BASE_FEE, xdr, Account } from "@stell
 import type { MarcConfig } from "./types.js";
 import type { Signer } from "./signer.js";
 import { toSigner } from "./signer.js";
+import { maskSecret } from "./format.js";
 
 /**
  * Abstract base class for Soroban contract clients.
@@ -77,7 +78,7 @@ export abstract class BaseClient {
     });
     const signedTx = TransactionBuilder.fromXDR(signedXdr, this.cfg.networkPassphrase);
     const sent = await this.server.sendTransaction(signedTx);
-    if (sent.status === "ERROR") throw new Error(`submit failed: ${sent.errorResult}`);
+    if (sent.status === "ERROR") throw new Error(maskSecret(`submit failed: ${sent.errorResult}`));
     let getResp = await this.server.getTransaction(sent.hash);
     while (getResp.status === "NOT_FOUND") {
       await new Promise((r) => setTimeout(r, 1000));
@@ -86,7 +87,7 @@ export abstract class BaseClient {
     if (getResp.status !== "SUCCESS") {
       const failed = getResp as rpc.Api.GetFailedTransactionResponse;
       const detail = failed.resultXdr?.result()?.switch()?.name ?? getResp.status;
-      throw new Error(`tx failed: ${detail}`);
+      throw new Error(maskSecret(`tx failed: ${detail}`));
     }
     this.cfg.onTx?.(sent.hash, txLabel);
     return decode(getResp.returnValue!);
@@ -116,7 +117,7 @@ export abstract class BaseClient {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const sim = await this.server.simulateTransaction(tx);
-        if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
+        if (rpc.Api.isSimulationError(sim)) throw new Error(maskSecret(sim.error));
         const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
         if (!result) throw new Error("no simulation result");
         return decode(result.retval);
@@ -159,7 +160,7 @@ export abstract class BaseClient {
       try {
         const sim = await this.server.simulateTransaction(tx);
         // RPC-level error — throw so callers know the network/contract failed.
-        if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
+        if (rpc.Api.isSimulationError(sim)) throw new Error(maskSecret(sim.error));
         const result = (sim as rpc.Api.SimulateTransactionSuccessResponse).result;
         // No result object means the RPC response was malformed — throw.
         if (!result) throw new Error("no simulation result");

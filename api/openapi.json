@@ -58,6 +58,26 @@
               "type": "string",
               "example": "webdev,html"
             }
+          },
+          {
+            "name": "min_price",
+            "in": "query",
+            "description": "Minimum agent price in USDC (positive number)",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "example": 1.0
+            }
+          },
+          {
+            "name": "max_price",
+            "in": "query",
+            "description": "Maximum agent price in USDC (positive number)",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "example": 5.0
+            }
           }
         ],
         "responses": {
@@ -73,6 +93,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid query parameters (e.g. non-numeric or negative price filters)"
           },
           "429": {
             "description": "Rate limited (60 requests/minute/IP)"
@@ -330,6 +353,28 @@
           },
           "alive": {
             "type": "boolean"
+          },
+          "reputation": {
+            "type": "object",
+            "description": "Verified on-chain reputation metrics from agentic commerce jobs",
+            "properties": {
+              "total_jobs": {
+                "type": "integer",
+                "example": 10
+              },
+              "completed_jobs": {
+                "type": "integer",
+                "example": 9
+              },
+              "disputed_jobs": {
+                "type": "integer",
+                "example": 1
+              },
+              "success_rate": {
+                "type": "string",
+                "example": "90%"
+              }
+            }
           }
         }
       },

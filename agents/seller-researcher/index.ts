@@ -5,7 +5,15 @@ import { fileURLToPath } from "node:url";
 import rateLimit from "express-rate-limit";
 import Groq from "groq-sdk";
 import { CommerceClient } from "marc-stellar-sdk";
-import { retryWithBackoff, createSellerAgent, makeSellerResponse, validateEnv } from "../shared.js";
+import {
+  retryWithBackoff,
+  createSellerAgent,
+  makeSellerResponse,
+  validateEnv,
+  validatePrompt,
+  isMockLlm,
+  MOCK_DELIVERABLES,
+} from "../shared.js";
 
 validateEnv(["PORT", "SECRET_KEY", "REGISTRY_URL", "GROQ_API_KEY"]);
 
@@ -22,7 +30,7 @@ const { app, seller, cfg } = await createSellerAgent({
   agentDir: AGENT_DIR,
 });
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groq = isMockLlm() ? null : new Groq({ apiKey: process.env.GROQ_API_KEY });
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 interface ResearchOutput {
@@ -46,8 +54,11 @@ const DEPTH_CONFIG: Record<ResearchDepth, { sourceRange: string; detail: string 
 };
 
 async function generate(task: string, depth: ResearchDepth = "standard"): Promise<ResearchOutput> {
+  if (isMockLlm()) {
+    return MOCK_DELIVERABLES.researcher;
+  }
   const { sourceRange, detail } = DEPTH_CONFIG[depth];
-  const res = await groq.chat.completions.create({
+  const res = await groq!.chat.completions.create({
     model: GROQ_MODEL,
     messages: [
       {
@@ -98,11 +109,20 @@ app.post("/job", limiter, async (req, res) => {
       .json({ success: false, error: "invalid jobId", execution_time_ms: Date.now() - startedAt });
     return;
   }
-  if (!task) {
-    console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: missing task`);
-    res
-      .status(400)
-      .json({ success: false, error: "missing task", execution_time_ms: Date.now() - startedAt });
+  const rawPrompt =
+    typeof task === "string"
+      ? task
+      : typeof (req.body as Record<string, unknown>).prompt === "string"
+        ? ((req.body as Record<string, unknown>).prompt as string)
+        : task;
+  const promptValidation = validatePrompt(rawPrompt);
+  if (!promptValidation.valid) {
+    console.warn(`[${AGENT_ID}] [req:${requestId}] Rejected: ${promptValidation.error}`);
+    res.status(400).json({
+      success: false,
+      error: promptValidation.error,
+      execution_time_ms: Date.now() - startedAt,
+    });
     return;
   }
   const resolvedDepth: ResearchDepth = ["brief", "standard", "deep"].includes(depth)

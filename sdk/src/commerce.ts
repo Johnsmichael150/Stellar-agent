@@ -7,6 +7,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { Job, JobStatus, MarcConfig } from "./types.js";
+import { JobStatusFromNumber } from "./types.js";
 import { BaseClient } from "./baseClient.js";
 import type { Signer } from "./signer.js";
 import { signerPublicKey } from "./signer.js";
@@ -347,6 +348,60 @@ export class CommerceClient extends BaseClient {
         updated_at: BigInt(native.updated_at ?? 0),
       } as Job;
     });
+  }
+
+  /**
+   * Fetch all jobs assigned to a specific provider.
+   *
+   * Calls `jobs_by_provider` on the commerce contract.
+   *
+   * @param provider - Stellar public key (G...) of the provider.
+   * @param startId - Starting job ID to scan from (default: 1n).
+   * @param limit - Maximum number of jobs to return (default: 100).
+   * @returns Array of jobs assigned to the provider.
+   */
+  async jobsByProvider(
+    provider: string,
+    startId: bigint = 1n,
+    limit: number = 100,
+  ): Promise<Job[]> {
+    const op = this.contract.call(
+      "jobs_by_provider",
+      new Address(provider).toScVal(),
+      nativeToScVal(startId, { type: "u64" }),
+      nativeToScVal(limit, { type: "u32" }),
+    );
+    return await this.simulate(op, (v) => {
+      const native = scValToNative(v);
+      if (!Array.isArray(native)) return [];
+      return native.map((j: any) => ({
+        id: BigInt(j.id),
+        client: j.client,
+        provider: j.provider,
+        evaluator: j.evaluator,
+        token: j.token,
+        budget: BigInt(j.budget),
+        status: (Array.isArray(j.status)
+          ? j.status[0]
+          : typeof j.status === "number"
+            ? JobStatusFromNumber[j.status] ?? j.status
+            : j.status) as JobStatus,
+        description: j.description,
+        deliverable: j.deliverable,
+        funded_at: BigInt(j.funded_at ?? 0),
+        created_at: BigInt(j.created_at ?? 0),
+        updated_at: BigInt(j.updated_at ?? 0),
+      })) as Job[];
+    });
+  }
+
+  /** Alias for jobsByProvider matching contract snake_case naming */
+  async jobs_by_provider(
+    provider: string,
+    startId: bigint = 1n,
+    limit: number = 100,
+  ): Promise<Job[]> {
+    return this.jobsByProvider(provider, startId, limit);
   }
 
   /**

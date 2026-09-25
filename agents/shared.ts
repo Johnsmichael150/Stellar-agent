@@ -27,7 +27,124 @@ export const APPROVED_TAGS = [
 
 export type ApprovedTag = (typeof APPROVED_TAGS)[number];
 
+export const MAX_PROMPT_LENGTH = 8000;
+
+/**
+ * Validate that a prompt/task input is a non-empty string and does not exceed
+ * the maximum character limit (8,000 characters).
+ */
+export function validatePrompt(prompt: unknown): { valid: boolean; error?: string } {
+  if (typeof prompt !== "string" || prompt.trim() === "") {
+    return { valid: false, error: "Prompt must be a non-empty string" };
+  }
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return {
+      valid: false,
+      error: `Prompt exceeds maximum allowed length of ${MAX_PROMPT_LENGTH} characters`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Checks whether offline mock LLM mode is enabled.
+ */
+export function isMockLlm(): boolean {
+  return process.env.MOCK_LLM === "true";
+}
+
+/**
+ * Realistic canned deliverables for offline integration testing without external LLM APIs.
+ */
+export const MOCK_DELIVERABLES = {
+  webbuilder: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autonomous Agent Commerce</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 2rem; background: #0f172a; color: #f8fafc; }
+    .container { max-width: 800px; margin: 0 auto; }
+    header { padding: 2rem 0; border-bottom: 1px solid #334155; }
+    h1 { color: #38bdf8; font-size: 2.25rem; }
+    p { font-size: 1.125rem; line-height: 1.6; color: #cbd5e1; }
+    .btn { display: inline-block; background: #0284c7; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 1rem; }
+    .btn:hover { background: #0369a1; }
+    .features { margin-top: 2rem; display: grid; gap: 1rem; }
+    .card { background: #1e293b; padding: 1.25rem; border-radius: 8px; border: 1px solid #334155; }
+    footer { margin-top: 3rem; color: #64748b; font-size: 0.875rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Autonomous Commerce Platform</h1>
+      <p>Instant, escrow-secured payments between autonomous agents on the Stellar network.</p>
+      <a href="#explore" class="btn">Explore Agents</a>
+    </header>
+    <main class="features">
+      <div class="card">
+        <h3>Escrow Settlements</h3>
+        <p>Funds locked in Soroban smart contracts and automatically released upon evaluator verification.</p>
+      </div>
+      <div class="card">
+        <h3>Decentralized Registry</h3>
+        <p>Real-time heartbeat monitoring and verified on-chain reputation ratings.</p>
+      </div>
+    </main>
+    <footer>&copy; 2026 Bear Protocol Mock Deliverable</footer>
+  </div>
+</body>
+</html>`,
+
+  copywriter: `# Next-Generation AI Commerce on Stellar
+
+## Trustless Micro-Settlements for Autonomous Agents
+
+Supercharge your decentralized applications with autonomous seller agents that deliver work and get paid instantly in USDC via Soroban smart contracts. No human intermediaries, zero escrow lockup risk.
+
+## Key Benefits
+- **Automated Milestone Escrow:** Payments released strictly upon verified deliverable approval.
+- **Sub-Second Finality:** Harness Stellar's lightning-fast consensus for seamless agent-to-agent transactions.
+- **Verified Reputation:** On-chain quality metrics that eliminate provider ambiguity.
+
+## Get Started
+Connect your buyer agent today and experience frictionless autonomous commerce.`,
+
+  namer: `# Brand Name Ideas
+
+1. **AegisFlow** - Blends security and fluid transactions, highlighting smart contract escrow safety.
+2. **StellarSphere** - Evokes wide-reaching decentralized infrastructure and interconnected agent ecosystems.
+3. **NovaPay** - Modern, concise branding signaling bright innovation in automated micropayments.
+4. **VanguardAgent** - Represents state-of-the-art autonomy, reliability, and enterprise-grade capability.
+5. **OmniSoroban** - Highlights complete multi-agent interoperability natively on the Soroban network.`,
+
+  researcher: {
+    summary:
+      "# Research Summary: Decentralized AI Agent Escrow Protocols\n\nRecent developments in blockchain-native agent infrastructure demonstrate a growing demand for autonomous micro-commerce [1]. By utilizing Soroban smart contracts on the Stellar network, agents can execute programmatic contracts with negligible transaction fees and guaranteed finality [2].\n\n## Core Findings\n- **Escrow Architecture:** Decentralized escrows eliminate counterparty risk between autonomous agents by holding buyer deposits until deliverables pass evaluator validation.\n- **Reputation Signals:** Tracking on-chain completed jobs and dispute counts provides reliable discovery metrics [3].\n- **Offline Reliability:** Mock test modes ensure continuous integration pipelines operate without external LLM dependencies.",
+    sources: [
+      {
+        title: "Stellar Soroban Smart Contracts Documentation",
+        url: "https://developers.stellar.org/docs/build/smart-contracts/overview",
+      },
+      {
+        title: "Decentralized AI Agent Commerce Architecture",
+        url: "https://stellar.expert/explorer/testnet",
+      },
+      {
+        title: "Stellar Consensus Protocol Specification",
+        url: "https://www.stellar.org/papers/stellar-consensus-protocol",
+      },
+    ],
+  },
+};
+
 export function validateEnv(requiredKeys: string[]): void {
+  const effectiveRequired = isMockLlm()
+    ? requiredKeys.filter((k) => k !== "GROQ_API_KEY")
+    : requiredKeys;
+
   const aliases: Record<string, string[]> = {
     PORT: ["PORT", "SELLER_PORT"],
     SECRET_KEY: ["SECRET_KEY", "SELLER_SECRET"],
@@ -36,7 +153,7 @@ export function validateEnv(requiredKeys: string[]): void {
   };
 
   const missing: string[] = [];
-  for (const key of requiredKeys) {
+  for (const key of effectiveRequired) {
     const candidates = aliases[key] ?? [key];
     const isPresent = candidates.some((candidateKey) => {
       const value = process.env[candidateKey];

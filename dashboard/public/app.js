@@ -268,6 +268,24 @@
   // Expose wallet functions globally
   window.__disconnectWallet = disconnectWallet;
 
+  /**
+   * Returns a display label for the currently connected wallet.
+   * Prefers the wallet name exposed by Stellar Wallets Kit; falls back to
+   * "Freighter" when only the legacy freighterApi is present, and "Wallet"
+   * as a generic catch-all.  Closes #584 (hardcoded "(Freighter)" label).
+   */
+  function connectedWalletLabel() {
+    if (swkReady && StellarWalletsKit && typeof StellarWalletsKit.getWalletName === "function") {
+      try {
+        var name = StellarWalletsKit.getWalletName();
+        if (name && name.length > 0) return name;
+      } catch (e) {}
+    }
+    var freighter = window.freighterApi || window.freighter;
+    if (freighter && typeof freighter.getPublicKey === "function") return "Freighter";
+    return "Wallet";
+  }
+
   // ── API Client ──
   async function api(path, opts = {}) {
     const headers = opts.body ? { "Content-Type": "application/json" } : {};
@@ -427,7 +445,12 @@
       + '</svg>';
     return '<div class="agent-avatar agent-avatar-svg" title="' + escapeHtml(pubkey) + '">' + svg + '</div>';
   }
+  // ── Toast container — resolved from DOM once on first call ──
+  var container = document.getElementById("toasts");
+
   function toast(msg, type = "success", duration = null) {
+    // Lazily resolve in case the DOM wasn't ready at parse time
+    if (!container) container = document.getElementById("toasts");
     const el = document.createElement("div");
     el.className = "toast " + type;
     el.setAttribute("role", "alert");
@@ -485,6 +508,50 @@
       ta.remove();
     }
     toast("Copied to clipboard");
+  }
+
+  /**
+   * Renders a small inline copy-to-clipboard icon button for an address/ID.
+   * Used next to truncated addresses in job detail rows and agent cards.
+   * Closes #584 (missing helper that caused ReferenceError on render).
+   */
+  function copyBtn(value) {
+    if (!value) return "";
+    var safe = escapeHtml(String(value));
+    return (
+      '<button class="copy-btn" title="Copy to clipboard" ' +
+      'onclick="event.stopPropagation();window.__copy(\'' + safe + '\')">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="9" y="9" width="13" height="13" rx="2"/>' +
+      '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' +
+      "</svg></button>"
+    );
+  }
+
+  /**
+   * Returns a human-readable relative time string (e.g. "2 hours ago") for a
+   * Unix timestamp (seconds).  Falls back to an absolute ISO date string when
+   * the Intl.RelativeTimeFormat API is unavailable.
+   * Closes #584 (missing helper that caused ReferenceError on render).
+   */
+  function formatRelativeTime(unixSeconds) {
+    if (!unixSeconds) return "—";
+    var ts = Number(unixSeconds) * 1000;
+    if (!Number.isFinite(ts)) return "—";
+    var diffMs = Date.now() - ts;
+    var diffSec = Math.round(diffMs / 1000);
+    var diffMin = Math.round(diffSec / 60);
+    var diffHr  = Math.round(diffMin / 60);
+    var diffDay = Math.round(diffHr  / 24);
+
+    if (typeof Intl !== "undefined" && Intl.RelativeTimeFormat) {
+      var rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+      if (Math.abs(diffSec) < 60)  return rtf.format(-diffSec, "second");
+      if (Math.abs(diffMin) < 60)  return rtf.format(-diffMin, "minute");
+      if (Math.abs(diffHr)  < 24)  return rtf.format(-diffHr,  "hour");
+      if (Math.abs(diffDay) < 30)  return rtf.format(-diffDay, "day");
+    }
+    return new Date(ts).toLocaleDateString();
   }
 
   // ── Modal ──
@@ -1348,7 +1415,7 @@
       ? '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
         '<div class="form-input" style="color:var(--accent);cursor:default">' +
         truncAddr(wallet.publicKey) +
-        " (Freighter)</div></div>"
+        " (" + connectedWalletLabel() + ")</div></div>"
       : '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
         '<select class="form-select" id="cj-wallet"><option value="buyer">Buyer (Client)</option><option value="seller">Seller</option></select></div>';
     showModal(
@@ -1482,7 +1549,7 @@
       ? '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
         '<div class="form-input" style="color:var(--accent);cursor:default">' +
         truncAddr(wallet.publicKey) +
-        " (Freighter)</div></div>"
+        " (" + connectedWalletLabel() + ")</div></div>"
       : '<div class="form-group"><label class="form-label">Signing Wallet</label>' +
         '<select class="form-select" id="ra-wallet"><option value="buyer">Buyer</option><option value="seller">Seller</option></select></div>';
     showModal(
@@ -1508,7 +1575,9 @@
     try {
       let agentId = null;
       if (wallet.connected) {
-        const res = await signAndSubmit("/agents/register", { wallet: "freighter", uri: uri });
+        // Pass 'connected' so the server uses the caller's public key regardless
+        // of which wallet adapter (Freighter, Albedo, xBull…) is active. (#584)
+        const res = await signAndSubmit("/agents/register", { wallet: "connected", uri: uri });
         hideTxOverlay();
         toast("Agent registered! tx: " + (res.hash || "").slice(0, 8) + "...");
       } else {

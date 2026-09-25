@@ -1,5 +1,5 @@
 export * from "./types.js";
-export { formatAmount } from "./format.js";
+export { formatAmount, maskSecret } from "./format.js";
 export { IdentityClient } from "./identity.js";
 export { CommerceClient } from "./commerce.js";
 export * from "./signer.js";

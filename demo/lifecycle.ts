@@ -14,6 +14,7 @@
 import "dotenv/config";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import * as readline from "node:readline";
+import { maskSecret } from "marc-stellar-sdk";
 
 const STEP_MODE = process.argv.includes("--step");
 const CLEANUP_MODE = process.argv.includes("--cleanup");
@@ -60,12 +61,12 @@ function waitForOutput(proc: ChildProcess, pattern: string, timeoutMs = 90_000):
     );
     const onStdout = (chunk: Buffer) => {
       const text = chunk.toString();
-      process.stdout.write(text);
+      process.stdout.write(maskSecret(text));
       if (text.includes(pattern)) finish();
     };
     const onStderr = (chunk: Buffer) => {
       const text = chunk.toString();
-      process.stderr.write(text);
+      process.stderr.write(maskSecret(text));
       if (text.includes(pattern)) finish();
     };
     const finish = () => {
@@ -101,10 +102,10 @@ async function runCleanup(): Promise<void> {
   log("running cleanup — returning tokens to treasury...");
   return new Promise((resolve, reject) => {
     execFile("bash", [scriptPath], { cwd: import.meta.dirname }, (err, stdout, stderr) => {
-      if (stdout) process.stdout.write(stdout);
-      if (stderr) process.stderr.write(stderr);
+      if (stdout) process.stdout.write(maskSecret(stdout));
+      if (stderr) process.stderr.write(maskSecret(stderr));
       if (err) {
-        log(`cleanup failed: ${err.message}`);
+        log(`cleanup failed: ${maskSecret(err.message)}`);
         reject(err);
       } else {
         log("cleanup complete");
@@ -154,7 +155,7 @@ async function main() {
 
   buyer.stdout?.on("data", (c: Buffer) => {
     const text = c.toString();
-    process.stdout.write(text);
+    process.stdout.write(maskSecret(text));
     if (!x402Failed && X402_FAIL_PATTERNS.some((p) => text.match(p))) {
       x402Failed = true;
     }
@@ -162,7 +163,7 @@ async function main() {
 
   buyer.stderr?.on("data", (c: Buffer) => {
     const text = c.toString();
-    process.stderr.write(text);
+    process.stderr.write(maskSecret(text));
     if (!x402Failed && X402_FAIL_PATTERNS.some((p) => text.match(p))) {
       x402Failed = true;
     }
@@ -200,6 +201,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(maskSecret(String(err?.stack ?? err)));
   process.exit(1);
 });

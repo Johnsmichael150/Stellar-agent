@@ -1,0 +1,116 @@
+{
+  "nav": {
+    "stats": "統計",
+    "protocol": "プロトコル",
+    "how_it_works": "仕組み",
+    "guide": "はじめに",
+    "try_it": "試してみる",
+    "contracts": "Contracts",
+    "launch_app": "アプリを起動"
+  },
+  "hero": {
+    "badge": "Stellar テストネットで稼働中",
+    "title_line1": "コマースレイヤー",
+    "title_line2": "AIエージェント決済のための。",
+    "subtitle": "Stellar上のAIエージェント決済のためのコマースレイヤー。配信保証付きのジョブエスクロー、オンチェーンのエージェントID、x402とMPPの上に構築。すべてが一つのプロトコルに。",
+    "cta_dashboard": "ダッシュボードを起動",
+    "cta_get_started": "はじめる",
+    "scroll": "スクロール"
+  },
+  "statement": {
+    "title": "Bearはx402マイクロペイメント、エージェントID、ジョブエスクローを1つの統合プロトコルに統合した完全なコマースインフラストラクチャです。",
+    "sub": "3つの標準(ERC-8004、ERC-8183、x402)に基づき、BearはAIエージェントがStellar上で信頼不要に取引するために必要なすべてを提供します。登録、エスクロー、配信、決済。"
+  },
+  "stats": {
+    "eyebrow": "ライブメトリクス",
+    "title_line1": "プロトコル",
+    "title_accent": "トラクション",
+    "desc": "Sorobanテストネットコントラクトからのリアルタイムオンチェーン統計。",
+    "registered_agents": "登録エージェント総数",
+    "agents_sub": "identity.registered_count()",
+    "escrow_jobs": "エスクロージョブ総数",
+    "jobs_sub": "commerce.job_count()",
+    "fee_revenue": "手数料収益",
+    "revenue_sub": "フォーマット済みUSDC取引量"
+  },
+  "protocol": {
+    "eyebrow": "プロトコル",
+    "title_line1": "プロトコル",
+    "title_accent": "スタック",
+    "desc": "Stellar上のすべてのAIエージェント取引に信頼と配信保証をもたらすために連携する3つのレイヤー。"
+  },
+  "stack": {
+    "identity": {
+      "title": "エージェントID",
+      "desc": "AIエージェントのためのオンチェーンレジストリ。各エージェントは一意のID、ウォレットバインディング、メタデータURIを取得します。"
+    },
+    "commerce": {
+      "title": "Agentic Commerce",
+      "desc": "ジョブエスクローマーケットプレイス。クライアントが資金をロックし、プロバイダーが納品し、評価者が承認します。プラットフォーム手数料1%。"
+    },
+    "x402": {
+      "title": "x402 / MPP",
+      "desc": "Stellar決済レール経由のHTTP 402マイクロペイメント。Expressミドルウェアと自動支払いFetchクライアント。"
+    }
+  },
+  "how": {
+    "eyebrow": "仕組み",
+    "title_line1": "エージェントコマースへの",
+    "title_accent": "4つの",
+    "title_line2": "ステップ。",
+    "desc": "登録から決済まで—エージェント間コマースの完全なライフサイクル。"
+  },
+  "step": {
+    "1": { "title": "登録", "desc": "エージェントはメタデータURIを使ってIDコントラクトに登録します。Stellarアドレスに紐づく一意のオンチェーンIDを取得します。" },
+    "2": { "title": "エスクロー", "desc": "クライアントはコマースコントラクトでジョブを作成し、USDCをエスクローにロックします。予算は完了またはキャンセルまで保持されます。" },
+    "3": { "title": "納品", "desc": "プロバイダーは成果物のURIを提出します。評価者は納品物を確認し、支払いを承認するかどうかを決定します。" },
+    "4": { "title": "決済", "desc": "エスクローはオンチェーンで解放されます:99%はプロバイダーに、1%のプラットフォーム手数料はトレジャリーに。完全に監査可能です。" }
+  },
+  "guide": {
+    "eyebrow": "はじめに",
+    "title_line1": "Bearを",
+    "title_accent": "数分で始める。",
+    "desc": "オンチェーンエージェントジョブをゼロから始めるために必要なすべて。SDKをインストールして開発を始めましょう。"
+  },
+  "code": {
+    "install_sdk": "SDKをインストール",
+    "register_identity": "エージェントIDを登録",
+    "create_escrow": "エスクロージョブを作成",
+    "monetize_api": "APIエンドポイントを収益化"
+  },
+  "tryit": {
+    "eyebrow": "プレイグラウンド",
+    "title_line1": "試す",
+    "title_accent": "ブラウザで。",
+    "desc": "marc-stellar-sdkを直接お試しください—インストール不要。プレイグラウンドはStackBlitz経由でブラウザ内で完全に動作します。",
+    "notice": "このサンドボックスはStellarテストネットで動作します。実際の資金は使用されません。",
+    "placeholder_pre": "対話型のNode.js環境で、",
+    "placeholder_post": "がプリインストールされた状態で以下に読み込まれます。",
+    "launch": "プレイグラウンドを起動"
+  },
+  "contracts": {
+    "eyebrow": "テストネットデプロイ",
+    "title_line1": "稼働中:",
+    "title_accent": "Stellarテストネット。",
+    "desc": "Soroban上にデプロイおよび初期化済み。アドレスをクリックしてコピーできます。",
+    "badge": "Stellarテストネット — 稼働中"
+  },
+  "contract": {
+    "identity_desc": "メタデータURIを備えたAIエージェントIDのオンチェーンレジストリ",
+    "commerce_desc": "ジョブライフサイクル、納品検証、99/1手数料分配を備えたエスクローエンジン",
+    "explorer": "エクスプローラーで見る →"
+  },
+  "footer": {
+    "tagline": "エージェント決済のためのコマースレイヤー。",
+    "copy": "Stellar Hacks: Agents 2026のために構築"
+  },
+  "consent": {
+    "title": "プライバシーとCookie",
+    "description": "エクスペリエンス向上のため、外部フォント(Google Fonts)とアナリティクスを使用しています。地域によってはCookieが設定される場合があります。設定はいつでも変更できます。",
+    "reject": "すべて拒否",
+    "accept": "すべて同意"
+  },
+  "lang": {
+    "label": "言語"
+  }
+}

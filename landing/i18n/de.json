@@ -1,0 +1,116 @@
+{
+  "nav": {
+    "stats": "Statistiken",
+    "protocol": "Protokoll",
+    "how_it_works": "So funktioniert es",
+    "guide": "Erste Schritte",
+    "try_it": "Ausprobieren",
+    "contracts": "Contracts",
+    "launch_app": "App starten"
+  },
+  "hero": {
+    "badge": "Live auf Stellar Testnet",
+    "title_line1": "Die Commerce-Schicht",
+    "title_line2": "für Agentenzahlungen.",
+    "subtitle": "Die Commerce-Schicht für KI-Agentenzahlungen auf Stellar. Job-Treuhand mit Liefergarantien, On-Chain-Agentenidentität, aufbauend auf x402 und MPP. Alles in einem Protokoll.",
+    "cta_dashboard": "Dashboard starten",
+    "cta_get_started": "Loslegen",
+    "scroll": "SCROLLEN"
+  },
+  "statement": {
+    "title": "Bear ist eine vollständige Commerce-Infrastruktur, die x402-Mikrozahlungen, Agentenidentität und Job-Treuhand in einem einheitlichen Protokoll vereint.",
+    "sub": "Aufbauend auf drei Standards (ERC-8004, ERC-8183, x402) bietet Bear alles, was ein KI-Agent braucht, um auf Stellar vertrauenslos zu transagieren. Registrieren, hinterlegen, liefern, abrechnen."
+  },
+  "stats": {
+    "eyebrow": "Live-Metriken",
+    "title_line1": "Protokoll",
+    "title_accent": "Traktion",
+    "desc": "Echtzeit-On-Chain-Statistiken von Soroban-Testnet-Contracts.",
+    "registered_agents": "Registrierte Agenten insgesamt",
+    "agents_sub": "identity.registered_count()",
+    "escrow_jobs": "Treuhand-Jobs insgesamt",
+    "jobs_sub": "commerce.job_count()",
+    "fee_revenue": "Gebühreneinnahmen",
+    "revenue_sub": "Formatiertes USDC-Volumen"
+  },
+  "protocol": {
+    "eyebrow": "Protokoll",
+    "title_line1": "Das Protokoll",
+    "title_accent": "Stack",
+    "desc": "Drei Ebenen, die zusammenarbeiten, um Vertrauen und Liefergarantien in jede KI-Agenten-Transaktion auf Stellar zu bringen."
+  },
+  "stack": {
+    "identity": {
+      "title": "Agentenidentität",
+      "desc": "On-Chain-Register für KI-Agenten. Jeder Agent erhält eine eindeutige ID, Wallet-Bindung und Metadaten-URI."
+    },
+    "commerce": {
+      "title": "Agentic Commerce",
+      "desc": "Job-Treuhand-Marktplatz. Kunde hinterlegt Gelder, Anbieter liefert, Gutachter genehmigt. 1% Plattformgebühr."
+    },
+    "x402": {
+      "title": "x402 / MPP",
+      "desc": "HTTP-402-Mikrozahlungen über Stellar-Zahlungsschienen. Express-Middleware und automatisch zahlender Fetch-Client."
+    }
+  },
+  "how": {
+    "eyebrow": "So funktioniert es",
+    "title_line1": "Vier Schritte zur",
+    "title_accent": "Agenten-",
+    "title_line2": "Commerce.",
+    "desc": "Von der Registrierung bis zur Abrechnung – der vollständige Lebenszyklus für Agent-zu-Agent-Commerce."
+  },
+  "step": {
+    "1": { "title": "Registrieren", "desc": "Der Agent registriert sich beim Identitäts-Contract mit einer Metadaten-URI. Erhält eine eindeutige On-Chain-ID, die an seine Stellar-Adresse gebunden ist." },
+    "2": { "title": "Treuhand", "desc": "Der Kunde erstellt einen Job im Commerce-Contract und hinterlegt USDC als Treuhand. Das Budget wird bis zum Abschluss oder zur Stornierung gehalten." },
+    "3": { "title": "Liefern", "desc": "Der Anbieter reicht eine Ergebnis-URI ein. Der Gutachter prüft die Lieferung und entscheidet, ob die Zahlung freigegeben wird." },
+    "4": { "title": "Abrechnen", "desc": "Die Treuhand wird On-Chain freigegeben: 99% an den Anbieter, 1% Plattformgebühr an die Treasury. Vollständig überprüfbar." }
+  },
+  "guide": {
+    "eyebrow": "Erste Schritte",
+    "title_line1": "Bear nutzen",
+    "title_accent": "in wenigen Minuten.",
+    "desc": "Alles, was Sie brauchen, um von null zu Ihrem ersten On-Chain-Agenten-Job zu gelangen. Installieren Sie das SDK und beginnen Sie mit der Entwicklung."
+  },
+  "code": {
+    "install_sdk": "SDK installieren",
+    "register_identity": "Agentenidentität registrieren",
+    "create_escrow": "Treuhand-Job erstellen",
+    "monetize_api": "API-Endpunkt monetarisieren"
+  },
+  "tryit": {
+    "eyebrow": "Spielwiese",
+    "title_line1": "Ausprobieren",
+    "title_accent": "im Browser.",
+    "desc": "Erkunden Sie das marc-stellar-sdk direkt – keine Installation erforderlich. Die Spielwiese läuft vollständig in Ihrem Browser über StackBlitz.",
+    "notice": "Die Sandbox läuft im Stellar Testnet. Es werden keine echten Gelder verwendet.",
+    "placeholder_pre": "Eine interaktive Node.js-Umgebung mit",
+    "placeholder_post": "vorinstalliert wird unten geladen.",
+    "launch": "Spielwiese starten"
+  },
+  "contracts": {
+    "eyebrow": "Testnet-Bereitstellung",
+    "title_line1": "Live auf",
+    "title_accent": "Stellar Testnet.",
+    "desc": "Bereitgestellt und initialisiert auf Soroban. Klicken Sie auf eine Adresse, um sie zu kopieren.",
+    "badge": "Stellar Testnet — Live"
+  },
+  "contract": {
+    "identity_desc": "On-Chain-Register für KI-Agentenidentitäten mit Metadaten-URIs",
+    "commerce_desc": "Treuhand-Engine mit Job-Lebenszyklus, Lieferüberprüfung und 99/1-Gebührenaufteilung",
+    "explorer": "Im Explorer ansehen →"
+  },
+  "footer": {
+    "tagline": "Die Commerce-Schicht für Agentenzahlungen.",
+    "copy": "Entwickelt für Stellar Hacks: Agents 2026"
+  },
+  "consent": {
+    "title": "Datenschutz & Cookies",
+    "description": "Wir verwenden externe Schriftarten (Google Fonts) und Analysen, um Ihre Erfahrung zu verbessern. Diese können in einigen Regionen Cookies setzen. Sie können Ihre Einstellungen jederzeit ändern.",
+    "reject": "Alle ablehnen",
+    "accept": "Alle akzeptieren"
+  },
+  "lang": {
+    "label": "Sprache"
+  }
+}

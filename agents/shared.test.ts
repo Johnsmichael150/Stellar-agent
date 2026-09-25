@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeSellerResponse, retryWithBackoff, validateEnv } from "./shared.js";
+import {
+  makeSellerResponse,
+  retryWithBackoff,
+  validateEnv,
+  validatePrompt,
+  MAX_PROMPT_LENGTH,
+  isMockLlm,
+  MOCK_DELIVERABLES,
+} from "./shared.js";
 
 test("makeSellerResponse - returns standard response format with success true and execution_time_ms >= 0", () => {
   const payload = { result: "test-data", count: 42 };
@@ -223,4 +231,94 @@ test("retryWithBackoff - throws error after exhausting all maxAttempts", async (
   } finally {
     console.error = originalError;
   }
+});
+
+test("validatePrompt - accepts valid non-empty string under 8000 characters", () => {
+  const result = validatePrompt("Build a modern landing page for an AI product");
+  assert.equal(result.valid, true);
+  assert.equal(result.error, undefined);
+});
+
+test("validatePrompt - accepts prompt at exact boundary of 8000 characters", () => {
+  const boundaryPrompt = "a".repeat(MAX_PROMPT_LENGTH);
+  assert.equal(boundaryPrompt.length, 8000);
+  const result = validatePrompt(boundaryPrompt);
+  assert.equal(result.valid, true);
+  assert.equal(result.error, undefined);
+});
+
+test("validatePrompt - rejects prompt exceeding 8000 characters boundary by 1 char", () => {
+  const oversizedPrompt = "a".repeat(8001);
+  const result = validatePrompt(oversizedPrompt);
+  assert.equal(result.valid, false);
+  assert.equal(
+    result.error,
+    "Prompt exceeds maximum allowed length of 8000 characters",
+  );
+});
+
+test("validatePrompt - rejects empty string", () => {
+  const result = validatePrompt("");
+  assert.equal(result.valid, false);
+  assert.equal(result.error, "Prompt must be a non-empty string");
+});
+
+test("validatePrompt - rejects whitespace-only string", () => {
+  const result = validatePrompt("    \n\t  ");
+  assert.equal(result.valid, false);
+  assert.equal(result.error, "Prompt must be a non-empty string");
+});
+
+test("validatePrompt - rejects non-string inputs", () => {
+  assert.equal(validatePrompt(null).valid, false);
+  assert.equal(validatePrompt(undefined).valid, false);
+  assert.equal(validatePrompt(12345).valid, false);
+  assert.equal(validatePrompt({}).valid, false);
+  assert.equal(validatePrompt([]).valid, false);
+});
+
+test("isMockLlm - respects process.env.MOCK_LLM", () => {
+  const prev = process.env.MOCK_LLM;
+  try {
+    delete process.env.MOCK_LLM;
+    assert.equal(isMockLlm(), false);
+
+    process.env.MOCK_LLM = "false";
+    assert.equal(isMockLlm(), false);
+
+    process.env.MOCK_LLM = "true";
+    assert.equal(isMockLlm(), true);
+  } finally {
+    if (prev !== undefined) {
+      process.env.MOCK_LLM = prev;
+    } else {
+      delete process.env.MOCK_LLM;
+    }
+  }
+});
+
+test("validateEnv - bypasses GROQ_API_KEY requirement when MOCK_LLM is true", () => {
+  const originalEnv = { ...process.env };
+  try {
+    process.env.MOCK_LLM = "true";
+    delete process.env.GROQ_API_KEY;
+    process.env.PORT = "4501";
+    process.env.SECRET_KEY = "S...";
+    process.env.REGISTRY_URL = "http://localhost:4500";
+
+    assert.doesNotThrow(() => {
+      validateEnv(["PORT", "SECRET_KEY", "REGISTRY_URL", "GROQ_API_KEY"]);
+    });
+  } finally {
+    process.env = originalEnv;
+  }
+});
+
+test("MOCK_DELIVERABLES - provides realistic deliverables for all 4 agents", () => {
+  assert.ok(MOCK_DELIVERABLES.webbuilder.includes("<!DOCTYPE html"));
+  assert.ok(MOCK_DELIVERABLES.copywriter.includes("# Next-Generation AI Commerce"));
+  assert.ok(MOCK_DELIVERABLES.namer.includes("AegisFlow"));
+  assert.ok(Array.isArray(MOCK_DELIVERABLES.researcher.sources));
+  assert.ok(MOCK_DELIVERABLES.researcher.sources.length >= 3);
+  assert.ok(MOCK_DELIVERABLES.researcher.summary.includes("Research Summary"));
 });

@@ -254,6 +254,74 @@ app.post("/heartbeat", requireApiKey, requireRegistryAuth, (req, res) => {
   res.json({ status: "ok", agentId, tags: extractTags(manifest) });
 });
 
+export interface AgentReputation {
+  total_jobs: number;
+  completed_jobs: number;
+  disputed_jobs: number;
+  success_rate: string;
+}
+
+export const reputationOverrides = new Map<string, Array<{ status: string | number }>>();
+
+export const agentic_commerce = {
+  async jobs_by_provider(wallet: string): Promise<Array<{ status: string | number }>> {
+    if (!wallet) return [];
+    if (reputationOverrides.has(wallet)) {
+      return reputationOverrides.get(wallet)!;
+    }
+    const contractAddress = process.env.AGENTIC_COMMERCE_CONTRACT;
+    if (!contractAddress) return [];
+    try {
+      const { CommerceClient, TESTNET } = await import("marc-stellar-sdk");
+      const rpcUrl = process.env.STELLAR_RPC_URL ?? TESTNET.rpcUrl;
+      const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE ?? TESTNET.networkPassphrase;
+      const commerce = new CommerceClient({
+        rpcUrl,
+        networkPassphrase,
+        identityContract: process.env.AGENT_IDENTITY_CONTRACT || TESTNET.identityContract,
+        commerceContract: contractAddress,
+        usdcToken: process.env.USDC_TOKEN_CONTRACT || TESTNET.usdcToken,
+      });
+      return await commerce.jobsByProvider(wallet);
+    } catch (err) {
+      logger.warn({ wallet, err: (err as Error).message }, "[registry] Failed to fetch on-chain jobs for agent");
+      return [];
+    }
+  },
+};
+
+export function calculateReputation(jobs: Array<{ status: string | number }>): AgentReputation {
+  const total_jobs = jobs.length;
+  if (total_jobs === 0) {
+    return {
+      total_jobs: 0,
+      completed_jobs: 0,
+      disputed_jobs: 0,
+      success_rate: "N/A",
+    };
+  }
+
+  const completed_jobs = jobs.filter((j) => {
+    const s = typeof j.status === "string" ? j.status.toLowerCase() : j.status;
+    return s === "completed" || s === 3;
+  }).length;
+
+  const disputed_jobs = jobs.filter((j) => {
+    const s = typeof j.status === "string" ? j.status.toLowerCase() : j.status;
+    return s === "disputed" || s === 6;
+  }).length;
+
+  const rate = (completed_jobs / total_jobs) * 100;
+  const formattedRate = Number.isInteger(rate) ? `${rate}%` : `${rate.toFixed(1)}%`;
+
+  return {
+    total_jobs,
+    completed_jobs,
+    disputed_jobs,
+    success_rate: formattedRate,
+  };
+}
+
 function filterByTags(
   agents: Record<string, unknown>[],
   rawTags: string,
@@ -269,7 +337,7 @@ function filterByTags(
   });
 }
 
-app.get("/agents", (req, res) => {
+app.get("/agents", async (req, res) => {
   let result: Record<string, unknown>[];
   if (req.query.include_inactive === "true") {
     result = getAllAgentsWithStatus();
@@ -279,13 +347,79 @@ app.get("/agents", (req, res) => {
   if (typeof req.query.tags === "string" && req.query.tags) {
     result = filterByTags(result, req.query.tags);
   }
-  return res.json(result);
+
+  // Parse and validate price range filters (min_price, max_price)
+  let minPrice: number | undefined;
+  if (req.query.min_price !== undefined) {
+    const raw = String(req.query.min_price).trim();
+    const val = Number(raw);
+    if (!raw || isNaN(val) || val < 0) {
+      return res.status(400).json({ error: "min_price must be a positive number" });
+    }
+    minPrice = val;
+  }
+
+  let maxPrice: number | undefined;
+  if (req.query.max_price !== undefined) {
+    const raw = String(req.query.max_price).trim();
+    const val = Number(raw);
+    if (!raw || isNaN(val) || val < 0) {
+      return res.status(400).json({ error: "max_price must be a positive number" });
+    }
+    maxPrice = val;
+  }
+
+  if (minPrice !== undefined) {
+    result = result.filter((a) => typeof a.price_usdc === "number" && a.price_usdc >= minPrice!);
+  }
+  if (maxPrice !== undefined) {
+    result = result.filter((a) => typeof a.price_usdc === "number" && a.price_usdc <= maxPrice!);
+  }
+
+  // Query agentic_commerce and attach reputation metrics
+  const agentsWithReputation = await Promise.all(
+    result.map(async (agent) => {
+      const wallet = typeof agent.wallet === "string" ? agent.wallet : "";
+      try {
+        const jobs = await agentic_commerce.jobs_by_provider(wallet);
+        return {
+          ...agent,
+          reputation: calculateReputation(jobs),
+        };
+      } catch {
+        return {
+          ...agent,
+          reputation: {
+            total_jobs: 0,
+            completed_jobs: 0,
+            disputed_jobs: 0,
+            success_rate: "N/A",
+          },
+        };
+      }
+    }),
+  );
+
+  return res.json(agentsWithReputation);
 });
 
-app.get("/agents/:id", rateLimitAgentList, (req, res) => {
+app.get("/agents/:id", rateLimitAgentList, async (req, res) => {
   const manifest = isAlive(req.params.id) ? activeAgents.get(req.params.id)!.manifest : null;
   if (!manifest) return res.status(404).json({ error: "agent not found or not alive" });
-  res.json(manifest);
+  const wallet = typeof manifest.wallet === "string" ? manifest.wallet : "";
+  let reputation: AgentReputation;
+  try {
+    const jobs = await agentic_commerce.jobs_by_provider(wallet);
+    reputation = calculateReputation(jobs);
+  } catch {
+    reputation = {
+      total_jobs: 0,
+      completed_jobs: 0,
+      disputed_jobs: 0,
+      success_rate: "N/A",
+    };
+  }
+  res.json({ ...manifest, reputation });
 });
 
 app.delete("/agents/:id", (req, res) => {

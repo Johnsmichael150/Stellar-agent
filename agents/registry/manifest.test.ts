@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateManifest } from "./server.js";
+import { validateManifest, calculateReputation } from "./server.js";
 
 const VALID_MANIFEST = {
   id: "seller-test",
@@ -194,4 +194,52 @@ test("validateManifest - rejects malformed tags array", () => {
       `Should reject tags: ${JSON.stringify(tags)}`,
     );
   }
+});
+
+test("calculateReputation - handles new agents with 0 jobs gracefully (displays N/A)", () => {
+  const reputation = calculateReputation([]);
+  assert.deepEqual(reputation, {
+    total_jobs: 0,
+    completed_jobs: 0,
+    disputed_jobs: 0,
+    success_rate: "N/A",
+  });
+});
+
+test("calculateReputation - correctly computes total, completed, disputed, and success_rate", () => {
+  const jobs = [
+    { status: "Completed" },
+    { status: "Completed" },
+    { status: "Completed" },
+    { status: "Disputed" },
+  ];
+  const reputation = calculateReputation(jobs);
+  assert.equal(reputation.total_jobs, 4);
+  assert.equal(reputation.completed_jobs, 3);
+  assert.equal(reputation.disputed_jobs, 1);
+  assert.equal(reputation.success_rate, "75%");
+});
+
+test("calculateReputation - supports numeric enum status values (3=Completed, 6=Disputed)", () => {
+  const jobs = [
+    { status: 3 }, // Completed
+    { status: 3 }, // Completed
+    { status: 5 }, // Cancelled
+    { status: 6 }, // Disputed
+    { status: 1 }, // Funded
+  ];
+  const reputation = calculateReputation(jobs);
+  assert.equal(reputation.total_jobs, 5);
+  assert.equal(reputation.completed_jobs, 2);
+  assert.equal(reputation.disputed_jobs, 1);
+  assert.equal(reputation.success_rate, "40%");
+});
+
+test("calculateReputation - handles 100% success rate correctly", () => {
+  const jobs = [{ status: "Completed" }, { status: "Completed" }];
+  const reputation = calculateReputation(jobs);
+  assert.equal(reputation.total_jobs, 2);
+  assert.equal(reputation.completed_jobs, 2);
+  assert.equal(reputation.disputed_jobs, 0);
+  assert.equal(reputation.success_rate, "100%");
 });

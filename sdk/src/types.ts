@@ -57,6 +57,7 @@ export enum JobStatus {
   Completed = "Completed",
   Rejected = "Rejected",
   Cancelled = "Cancelled",
+  Disputed = "Disputed",
 }
 
 /**
@@ -64,7 +65,7 @@ export enum JobStatus {
  * corresponding `JobStatus` string value.
  *
  * The Soroban contract stores `JobStatus` as a compact u32 enum on-chain.
- * When `scValToNative` decodes it you get a number (0-5). Instead of writing:
+ * When `scValToNative` decodes it you get a number (0-6). Instead of writing:
  *
  * ```ts
  * const label = Object.keys(JobStatus).find(k => (JobStatus as any)[k] === n);
@@ -85,6 +86,7 @@ export const JobStatusFromNumber: Record<number, JobStatus> = {
   3: JobStatus.Completed,
   4: JobStatus.Rejected,
   5: JobStatus.Cancelled,
+  6: JobStatus.Disputed,
 };
 
 /**

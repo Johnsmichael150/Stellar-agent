@@ -184,7 +184,33 @@ cd agents/buyer && npm start
 Each agent's logs are color-coded by prefix (e.g. `[REGISTRY]`, `[WEBBUILDER]`) so you can
 follow individual streams at a glance.
 
-## 7. Resetting State
+## 7. Offline Testing with Mock Mode (`MOCK_LLM=true`)
+
+Running seller agents normally requires active external LLM API credentials (`GROQ_API_KEY`). For local integration testing, CI pipelines, or offline development, you can enable mock mode by setting:
+
+```bash
+export MOCK_LLM=true
+```
+
+Or by adding `MOCK_LLM=true` to your `.env` configuration file:
+
+```dotenv
+MOCK_LLM=true
+```
+
+### How Mock Mode Works
+
+When `MOCK_LLM=true`:
+- `GROQ_API_KEY` is not required for agent startup.
+- External LLM API calls are bypassed entirely.
+- Seller agents generate realistic canned deliverables:
+  - **Web Builder (`seller-webbuilder`)**: Returns a sample HTML/CSS landing page template.
+  - **Copywriter (`seller-copywriter`)**: Returns sample marketing copy structured with headline, subhead, body, and CTA.
+  - **Namer (`seller-namer`)**: Returns a numbered list of 5 brand name ideas with rationale.
+  - **Researcher (`seller-researcher`)**: Returns a formatted JSON research summary with verifiable citations and source URLs.
+- The full payment, escrow creation, deliverable submission, and registry reputation flow can be tested end-to-end for free without third-party API dependencies.
+
+## 8. Resetting State
 
 Because the container runs with `--rm`, stopping it wipes all chain state:
 

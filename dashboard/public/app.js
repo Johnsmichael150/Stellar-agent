@@ -28,11 +28,22 @@
     loading: { stats: false, wallets: false, agents: false, jobs: false },
     jobFilter: "Active",
     jobSearch: "",
+    agentSearch: "",   // #583 — agent name/description/tag filter
     agentPage: 1,
     agentPageSize: 24,
     agentTotal: 0,
     txPending: false,
   };
+
+  // ── Debounce helper ──
+  function debounce(fn, ms) {
+    var timer;
+    return function () {
+      var args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(null, args); }, ms);
+    };
+  }
 
   // ── Stellar Wallets Kit integration ──
   const wallet = {
@@ -502,7 +513,7 @@
     return overlay;
   }
 
-  // ── Skeleton Loaders ──
+  // ── Skeleton Loaders (#582) ──
   function skeletonCards(n) {
     let html = '<div class="stat-grid">';
     for (let i = 0; i < (n || 4); i++) {
@@ -515,9 +526,28 @@
     let html = "";
     for (let i = 0; i < (n || 3); i++) {
       html +=
-        '<div class="skeleton-card" style="height:64px;margin-bottom:8px"><div class="skeleton skeleton-line w80"></div></div>';
+        '<div class="skeleton-card skeleton-job-row">' +
+        '<div class="skeleton skeleton-line w40" style="margin-bottom:8px"></div>' +
+        '<div class="skeleton skeleton-line w80"></div>' +
+        '</div>';
     }
     return html;
+  }
+  // Skeleton grid for agent cards (#582)
+  function skeletonAgentCards(n) {
+    let html = '<div class="agent-grid">';
+    for (let i = 0; i < (n || 4); i++) {
+      html +=
+        '<div class="skeleton-card skeleton-agent-card">' +
+        '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">' +
+        '<div class="skeleton" style="width:40px;height:40px;border-radius:10px;flex-shrink:0"></div>' +
+        '<div class="skeleton skeleton-line w60" style="margin:0"></div>' +
+        '</div>' +
+        '<div class="skeleton skeleton-line w80"></div>' +
+        '<div class="skeleton skeleton-line w60"></div>' +
+        '</div>';
+    }
+    return html + "</div>";
   }
 
   // ── Safe DOM render helper ──
@@ -525,6 +555,89 @@
     // All HTML is constructed from trusted sources (our API responses contain
     // only Stellar addresses and contract state, not user-generated content)
     document.getElementById("page").innerHTML = html;
+  }
+
+  // ── Deliverable Preview (#580) ──
+  // Detects deliverable type and renders a safe, interactive preview.
+  // All user-supplied strings are run through escapeHtml before insertion.
+  function renderDeliverable(raw) {
+    if (!raw) return "";
+    var str = String(raw).trim();
+
+    // Detect URL (IPFS or HTTP/HTTPS)
+    var isUrl = /^(https?:\/\/|ipfs:\/\/)/i.test(str);
+    if (isUrl) {
+      var safeUrl = escapeHtml(str);
+      // Only allow http/https/ipfs in href — strip anything else
+      var hrefSafe = /^(https?:|ipfs:)/i.test(str) ? safeUrl : "#";
+      return (
+        '<div class="deliverable-preview deliverable-url">' +
+        '<div class="deliverable-label">Deliverable Link</div>' +
+        '<a class="deliverable-link" href="' + hrefSafe + '" target="_blank" rel="noopener noreferrer">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
+        escapeHtml(str.length > 80 ? str.slice(0, 80) + "…" : str) +
+        '</a>' +
+        '</div>'
+      );
+    }
+
+    // Detect Markdown (starts with #, **, -, >, ```, or contains \n##)
+    var isMarkdown = /^#{1,6}\s|^\*\*|^[-*+]\s|^>\s|^```|(\n#{1,6}\s)/.test(str);
+    if (isMarkdown) {
+      // Safe markdown-to-HTML: only handle headings, bold, italic, code, line breaks
+      // Every raw string segment is escaped before any HTML is emitted
+      var mdHtml = str
+        .split("\n")
+        .map(function (line) {
+          var l = escapeHtml(line);
+          // ### Heading
+          l = l.replace(/^(#{1,6})\s(.+)$/, function (_, hashes, content) {
+            var level = Math.min(hashes.length + 2, 6); // h3–h6
+            return "<h" + level + " class='md-heading'>" + content + "</h" + level + ">";
+          });
+          // **bold**
+          l = l.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+          // *italic*
+          l = l.replace(/\*(.+?)\*/g, "<em>$1</em>");
+          // `inline code`
+          l = l.replace(/`([^`]+)`/g, "<code class='md-code'>$1</code>");
+          // List items
+          l = l.replace(/^[-*+]\s(.+)$/, "<li>$1</li>");
+          // Blockquote
+          l = l.replace(/^&gt;\s(.+)$/, "<blockquote class='md-blockquote'>$1</blockquote>");
+          return l || "<br>";
+        })
+        .join("\n");
+      return (
+        '<div class="deliverable-preview deliverable-markdown">' +
+        '<div class="deliverable-label">Markdown Preview</div>' +
+        '<div class="deliverable-md-body">' + mdHtml + '</div>' +
+        '</div>'
+      );
+    }
+
+    // JSON detection
+    var isJson = false;
+    var prettyJson = null;
+    if ((str.startsWith("{") || str.startsWith("[")) && str.length < 50000) {
+      try {
+        prettyJson = JSON.stringify(JSON.parse(str), null, 2);
+        isJson = true;
+      } catch (e) {}
+    }
+
+    // Plain text / JSON — render as code block with copy button
+    var codeContent = isJson ? prettyJson : str;
+    var uid = "dlv-copy-" + Date.now();
+    return (
+      '<div class="deliverable-preview deliverable-code">' +
+      '<div class="deliverable-label-row">' +
+      '<div class="deliverable-label">' + (isJson ? "JSON Deliverable" : "Deliverable") + '</div>' +
+      '<button class="btn btn-secondary btn-sm" onclick="window.__copy(' + "'" + escapeHtml(codeContent).replace(/'/g, "\\'") + "'" + ')">Copy</button>' +
+      '</div>' +
+      '<pre class="deliverable-pre"><code>' + escapeHtml(codeContent) + '</code></pre>' +
+      '</div>'
+    );
   }
 
   // ── Data Fetchers ──
@@ -907,7 +1020,7 @@
             '<div class="detail-item" style="grid-column:1/-1">' +
             '<div class="detail-label">Deliverable</div>' +
             '<div class="detail-value">' +
-            escapeHtml(j.deliverable) +
+            renderDeliverable(j.deliverable) +
             "</div></div>";
         }
 
@@ -982,22 +1095,57 @@
     setPage(
       '<div class="section-header"><div><div class="section-title">Agents</div><div class="page-subtitle" style="margin-top:2px">On-chain identity registry for AI agents</div></div>' +
         '<button class="btn btn-primary" onclick="window.__showRegisterAgent()">+ Register Agent</button></div>' +
-        skeletonList(3),
+        skeletonAgentCards(4),
     );
 
     await loadAgents();
     const agents = state.agents || [];
 
+    // #583 — apply agent search filter
+    var agentQuery = (state.agentSearch || "").toLowerCase().trim();
+    var filtered = agents;
+    if (agentQuery) {
+      filtered = agents.filter(function (a) {
+        return (
+          (a.owner || "").toLowerCase().includes(agentQuery) ||
+          (a.uri || "").toLowerCase().includes(agentQuery) ||
+          String(a.id).includes(agentQuery) ||
+          (Array.isArray(a.tags) && a.tags.some(function (t) {
+            return t.toLowerCase().includes(agentQuery);
+          })) ||
+          (a.description || "").toLowerCase().includes(agentQuery) ||
+          (a.name || "").toLowerCase().includes(agentQuery)
+        );
+      });
+    }
+
+    // #583 — search bar with 200ms debounce
+    var searchBar =
+      '<div class="agent-search-wrap" style="margin-bottom:16px">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>' +
+      '<input class="agent-search-input" id="agent-search" type="search" ' +
+      'placeholder="Search agents by name, skill, or tag…" ' +
+      'value="' + escapeHtml(state.agentSearch) + '" ' +
+      'oninput="window.__searchAgentsDebounced(this.value)" ' +
+      'aria-label="Search agents">' +
+      '</div>';
+
     let cards = "";
-    if (agents.length === 0) {
-      cards =
-        '<div class="empty-state">' +
-        '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>' +
-        '<div class="empty-title">No agents registered</div>' +
-        '<div class="empty-desc">Register your first agent to get started.</div></div>';
+    if (filtered.length === 0) {
+      var emptyMsg = agentQuery
+        ? '<div class="empty-state">' +
+          '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>' +
+          '<div class="empty-title">No agents found matching &ldquo;' + escapeHtml(agentQuery) + '&rdquo;</div>' +
+          '<div class="empty-desc">Try a different search term.</div></div>'
+        : '<div class="empty-state">' +
+          '<div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>' +
+          '<div class="empty-title">No agents registered</div>' +
+          '<div class="empty-desc">Register your first agent to get started.</div></div>';
+      cards = emptyMsg;
     } else {
       cards = '<div class="agent-grid">';
-      for (const a of agents) {
+      for (const a of filtered) {
         cards +=
           '<div class="agent-card">' +
           '<div class="agent-card-top">' +
@@ -1023,7 +1171,7 @@
     }
 
     const totalPages = Math.max(1, Math.ceil(state.agentTotal / state.agentPageSize));
-    if (totalPages > 1) {
+    if (totalPages > 1 && !agentQuery) {
       cards +=
         '<div class="filter-tabs" style="margin-top:20px">' +
         '<button class="filter-tab" ' +
@@ -1058,8 +1206,16 @@
         '<div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>' +
         '</div><div class="stat-value" style="font-size:14px;font-weight:600;color:var(--text-muted);font-family:var(--mono)">ERC-8004</div></div>' +
         "</div>" +
+        searchBar +
         cards,
     );
+
+    // Restore focus to search input after re-render
+    var inp = document.getElementById("agent-search");
+    if (inp && agentQuery) {
+      inp.focus();
+      inp.setSelectionRange(inp.value.length, inp.value.length);
+    }
   }
 
   // 5. Transaction History
@@ -1342,6 +1498,13 @@
     await loadAgents(page);
     renderAgents();
   };
+
+  // #583 — debounced agent search handler
+  var _searchAgentsImmediate = function (value) {
+    state.agentSearch = value;
+    renderAgents();
+  };
+  window.__searchAgentsDebounced = debounce(_searchAgentsImmediate, 200);
 
   window.__showCreateJob = function () {
     var walletField = wallet.connected
@@ -1725,17 +1888,51 @@
   if (typeof EventSource !== "undefined") {
     try {
       const es = new EventSource("/api/stream");
+
+      // #581 — SSE connection status helpers
+      function setSseStatus(state) {
+        // state: 'connecting' | 'live' | 'reconnecting'
+        var dots = [
+          document.getElementById("sse-dot"),
+          document.getElementById("sse-dot-desktop"),
+        ];
+        var labels = [
+          document.getElementById("sse-label"),
+          document.getElementById("sse-label-desktop"),
+        ];
+        var pills = [
+          document.getElementById("sse-status-pill"),
+          document.getElementById("sse-status-pill-desktop"),
+        ];
+        var text = state === "live" ? "Live" : state === "reconnecting" ? "Reconnecting…" : "Connecting…";
+        dots.forEach(function (d) {
+          if (!d) return;
+          d.className = "sse-dot sse-dot-" + state;
+        });
+        labels.forEach(function (l) { if (l) l.textContent = text; });
+        pills.forEach(function (p) {
+          if (!p) return;
+          p.className = "sse-status-pill sse-" + state + (p.classList.contains("sse-status-sidebar") ? " sse-status-sidebar" : "");
+        });
+      }
+
+      es.onopen = function () {
+        setSseStatus("live");
+      };
       es.addEventListener("invalidate", function (e) {
+        setSseStatus("live");
         try {
-          const payload = JSON.parse(e.data);
-          // On any invalidation, run a quick poll to refresh current view
+          JSON.parse(e.data);
           poll();
         } catch (err) {
           poll();
         }
       });
-      es.addEventListener("ping", function () {});
+      es.addEventListener("ping", function () {
+        setSseStatus("live");
+      });
       es.onerror = function () {
+        setSseStatus("reconnecting");
         // Close noisy stream errors; polling remains as a fallback
         try {
           es.close();

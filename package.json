@@ -7,13 +7,17 @@
     "sdk",
     "dashboard",
     "demo",
-    "agents"
+    "landing",
+    "agents",
+    "agents/*"
   ],
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "cargo clippy --all-targets --all-features -- -D warnings",
-    "test": "cargo test",
+    "test": "cargo test --workspace && npm run test --workspaces --if-present",
+    "test:rust": "cargo test --workspace",
+    "test:ts": "npm run test --workspaces --if-present",
     "prepare": "husky install"
   },
   "devDependencies": {

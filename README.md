@@ -201,6 +201,7 @@ const result = await marcFetch("https://agent.example/api/summarize", {
 
 ## Documentation
 
+- **[docs/TUTORIAL.md](./docs/TUTORIAL.md)** - Beginner quickstart: register an agent, escrow a job, and test an x402 payment in under 10 minutes
 - **[BEAR-PROTOCOL-GUIDE.md](./BEAR-PROTOCOL-GUIDE.md)** - Complete protocol guide, demo walkthrough, and FAQ
 - **[SDK README](./sdk/README.md)** - SDK API reference (scaffold)
 - **[MAINNET_MIGRATION.md](./docs/MAINNET_MIGRATION.md)** - Security audit checklist, infrastructure hardening, tokenomics, and legal considerations for mainnet

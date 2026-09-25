@@ -15,6 +15,21 @@
  * formatAmount(9_999_999_999n, { precision: 2 })   // "999.99"
  * formatAmount(5_000_000_000_000n, { group: true, precision: 2 }) // "500,000"
  */
+/** Matches a Stellar secret seed (starts with `S`, 56 base32 chars) anywhere in a string. */
+const SECRET_KEY_PATTERN = /S[A-Z2-7]{55}/g;
+
+/**
+ * Redact any Stellar secret key found in a string, keeping only the first
+ * and last 4 characters (e.g. `SABC...WXYZ`).
+ *
+ * Used to sanitize log lines and error messages before they're printed, so
+ * a secret seed accidentally captured in a stack trace or debug dump is
+ * never shown in plaintext.
+ */
+export function maskSecret(str: string): string {
+  return str.replace(SECRET_KEY_PATTERN, (match) => `${match.slice(0, 4)}...${match.slice(-4)}`);
+}
+
 export function formatAmount(
   amount: bigint,
   options: {

@@ -10,7 +10,7 @@
 (function () {
   "use strict";
 
-  var SUPPORTED_LANGS = ["en", "es", "fr", "pt"];
+  var SUPPORTED_LANGS = ["en", "es", "fr", "pt", "de", "ja"];
   var DEFAULT_LANG = "en";
   var STORAGE_KEY = "bear-lang";
 
@@ -99,7 +99,7 @@
     select.className = "lang-switch";
     select.setAttribute("aria-label", "Language");
 
-    var LABELS = { en: "EN", es: "ES", fr: "FR", pt: "PT" };
+    var LABELS = { en: "EN", es: "ES", fr: "FR", pt: "PT", de: "DE", ja: "JA" };
     for (var i = 0; i < SUPPORTED_LANGS.length; i++) {
       var lang = SUPPORTED_LANGS[i];
       var option = document.createElement("option");

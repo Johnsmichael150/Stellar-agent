@@ -13,6 +13,7 @@ version: "3.9"
 # Services:
 #   soroban-rpc   local Stellar devnet (Soroban-enabled, port 8000)
 #   sdk           build the marc-stellar-sdk TypeScript package
+#   dashboard     web dashboard UI (port 3000)
 #   registry      agent discovery API (port 4500)
 #   seller-*      agent workers (ports 4501-4504)
 #   buyer         interactive Blessed TUI (healthcheck port 4550, stdin required)
@@ -48,6 +49,22 @@ services:
     command: sh -c "npm install --silent 2>/dev/null && npm run build"
     restart: "no"
     profiles: ["setup"]
+
+  # ── Web Dashboard ──────────────────────────────────────────────────────────
+  dashboard:
+    <<: *node
+    working_dir: /app/dashboard
+    command: sh -c "
+      npm install --silent 2>/dev/null &&
+      npx tsx server.ts
+    "
+    ports:
+      - "3000:3000"
+    depends_on:
+      sdk:
+        condition: service_completed_successfully
+      soroban-rpc:
+        condition: service_healthy
 
   # ── Agent Registry ────────────────────────────────────────────────────────
   registry:
